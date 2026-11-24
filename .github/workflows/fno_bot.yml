@@ -1,0 +1,36 @@
+name: FINSIDE ZING Institutional Scanner
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: zing-live-scanner
+  cancel-in-progress: false
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install required libraries
+        run: |
+          pip install smartapi-python pyotp pytz requests numpy pandas logzero websocket-client openpyxl
+
+      - name: Run ZING Signal Scanner
+        env:
+          ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
+          ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+          FNO_TELEGRAM_TOKEN: ${{ secrets.FNO_TELEGRAM_TOKEN }}
+          FNO_TELEGRAM_CHAT_ID: ${{ secrets.FNO_TELEGRAM_CHAT_ID }}
+        run: |
+          python finside_zing_pa.py
