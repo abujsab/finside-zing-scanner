@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 
 # ==============================================================================
-# FINSIDE ZING FOREX & GOLD 24/5 SCANNER (PRO 8-COMMAND EDITION - SAFE STATE)
+# FINSIDE ZING FOREX & GOLD 24/5 SCANNER (PRO 8-COMMAND EDITION - CLEAN)
 # ==============================================================================
 
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "").strip()
@@ -37,7 +37,6 @@ def get_session_name(dt_ist):
 
 
 def normalize_trade(t, fallback_pair="UNKNOWN"):
-    """Safely normalize trade dicts from any previous state version."""
     if not isinstance(t, dict):
         return None
     pair = t.get("pair") or t.get("symbol") or fallback_pair
@@ -56,7 +55,7 @@ def normalize_trade(t, fallback_pair="UNKNOWN"):
         "target": target,
         "units": units,
         "time": t.get("time") or t.get("opened_at") or "",
-        "exit": t.get("exit", 0.0),
+        "exit": float(t.get("exit", 0.0)),
         "pnl": float(t.get("pnl", 0.0)),
         "reason": t.get("reason", ""),
         "closed_time": t.get("closed_time", "")
@@ -87,30 +86,29 @@ def load_state():
             "last_prices": raw.get("last_prices", {}) if isinstance(raw.get("last_prices"), dict) else {}
         }
 
-        # Handle open_trades whether stored as dict {pair: trade} or list [trade]
         raw_open = raw.get("open_trades", [])
         if isinstance(raw_open, dict):
             for k, v in raw_open.items():
                 nt = normalize_trade(v, fallback_pair=k)
-                if nt:
+                if nt and nt["entry"] > 0 and nt["target"] > 0:
                     state["open_trades"].append(nt)
         elif isinstance(raw_open, list):
             for item in raw_open:
                 nt = normalize_trade(item)
-                if nt:
+                if nt and nt["entry"] > 0 and nt["target"] > 0:
                     state["open_trades"].append(nt)
 
-        # Handle closed_trades safely
         raw_closed = raw.get("closed_trades", [])
         if isinstance(raw_closed, list):
             for item in raw_closed:
                 nt = normalize_trade(item)
-                if nt:
+                # Filter out invalid 0.0 migration artifacts
+                if nt and nt["exit"] > 0:
                     state["closed_trades"].append(nt)
 
         return state
     except Exception as e:
-        print(f"State Load Warning (resetting cleanly): {e}")
+        print(f"State Load Warning: {e}")
         return default_state
 
 
@@ -416,21 +414,23 @@ def manage_open_trades(state, pair, curr_price):
 
         hit_reason = None
         exit_px = curr_price
+        sl_px = float(t.get("sl", 0.0))
+        tp_px = float(t.get("target", 0.0))
 
         if t["side"] == "BUY":
-            if curr_price <= t["sl"]:
+            if sl_px > 0 and curr_price <= sl_px:
                 hit_reason = "Stop-Loss Hit"
-                exit_px = t["sl"]
-            elif curr_price >= t["target"]:
+                exit_px = sl_px
+            elif tp_px > 0 and curr_price >= tp_px:
                 hit_reason = "Target Hit 🎯"
-                exit_px = t["target"]
+                exit_px = tp_px
         else:
-            if curr_price >= t["sl"]:
+            if sl_px > 0 and curr_price >= sl_px:
                 hit_reason = "Stop-Loss Hit"
-                exit_px = t["sl"]
-            elif curr_price <= t["target"]:
+                exit_px = sl_px
+            elif tp_px > 0 and curr_price <= tp_px:
                 hit_reason = "Target Hit 🎯"
-                exit_px = t["target"]
+                exit_px = tp_px
 
         if hit_reason:
             diff = (exit_px - t["entry"]) if t["side"] == "BUY" else (t["entry"] - exit_px)
@@ -490,7 +490,7 @@ def evaluate_signal(pair, c15, c1h, state):
 
     sl_dist = round(atr * 1.5, decimals)
     tp_dist = round(atr * 2.5, decimals)
-    if sl_dist <= 0:
+    if sl_dist <= 0 or tp_dist <= 0:
         return
 
     entry = round(curr_price, decimals)
@@ -529,8 +529,7 @@ def main():
     print(f"[{now_ist().strftime('%Y-%m-%d %H:%M IST')}] Running 5-Min Forex Scan...")
     state = load_state()
 
-    process_telegram_commands(state)
-
+    # 1. Fetch fresh live prices & evaluate setups first
     for idx, pair in enumerate(PAIRS):
         c15 = fetch_candles(pair, "15min")
         time.sleep(8)
@@ -546,6 +545,9 @@ def main():
 
         manage_open_trades(state, pair, curr_price)
         evaluate_signal(pair, c15, c1h, state)
+
+    # 2. Reply to Telegram commands using the freshly updated live prices
+    process_telegram_commands(state)
 
     save_state(state)
     print("5-Min Forex Scan Completed Successfully.")
