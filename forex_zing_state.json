@@ -2,12 +2,24 @@
   "balance": 10000.0,
   "paused": false,
   "last_update_id": 604215577,
-  "open_trades": [],
+  "open_trades": [
+    {
+      "pair": "EUR/USD",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "New York Session",
+      "entry": 1.09682,
+      "sl": 1.09627,
+      "target": 1.09774,
+      "units": 181818.18,
+      "time": "2026-11-25 02:10 IST"
+    }
+  ],
   "closed_trades": [],
   "last_prices": {
-    "XAU/USD": 3551.65565,
-    "EUR/USD": 1.09671,
-    "GBP/USD": 1.3117,
-    "USD/JPY": 159.19046
+    "XAU/USD": 3548.04377,
+    "EUR/USD": 1.09682,
+    "GBP/USD": 1.31181,
+    "USD/JPY": 159.19814
   }
 }
