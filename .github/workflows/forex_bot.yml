@@ -3,6 +3,10 @@ name: FINSIDE Forex & Gold 24/5 Scanner
 on:
   workflow_dispatch:
 
+concurrency:
+  group: forex-scanner
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -31,4 +35,5 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add forex_zing_state.json || true
           git diff --staged --quiet || git commit -m "chore: update forex paper trading state [skip ci]"
+          git pull --rebase origin main
           git push
