@@ -6,7 +6,7 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 
 # ==============================================================================
-# FINSIDE ZING FOREX & GOLD 24/5 SCANNER (PRO 8-COMMAND EDITION)
+# FINSIDE ZING FOREX & GOLD 24/5 SCANNER (PRO 8-COMMAND EDITION - SAFE STATE)
 # ==============================================================================
 
 TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "").strip()
@@ -36,6 +36,33 @@ def get_session_name(dt_ist):
         return "Asian / Sydney Session"
 
 
+def normalize_trade(t, fallback_pair="UNKNOWN"):
+    """Safely normalize trade dicts from any previous state version."""
+    if not isinstance(t, dict):
+        return None
+    pair = t.get("pair") or t.get("symbol") or fallback_pair
+    side = t.get("side") or t.get("direction") or t.get("action") or "BUY"
+    entry = float(t.get("entry") or t.get("entry_price") or 0.0)
+    sl = float(t.get("sl") or t.get("stop_loss") or 0.0)
+    target = float(t.get("target") or t.get("tp") or 0.0)
+    units = float(t.get("units") or t.get("qty") or t.get("size") or 0.0)
+    return {
+        "pair": pair,
+        "side": side,
+        "strategy": t.get("strategy", "ZING Trend"),
+        "session": t.get("session", ""),
+        "entry": entry,
+        "sl": sl,
+        "target": target,
+        "units": units,
+        "time": t.get("time") or t.get("opened_at") or "",
+        "exit": t.get("exit", 0.0),
+        "pnl": float(t.get("pnl", 0.0)),
+        "reason": t.get("reason", ""),
+        "closed_time": t.get("closed_time", "")
+    }
+
+
 def load_state():
     default_state = {
         "balance": INITIAL_CAPITAL,
@@ -49,12 +76,41 @@ def load_state():
         return default_state
     try:
         with open(STATE_FILE, "r") as f:
-            data = json.load(f)
-        for k, v in default_state.items():
-            if k not in data:
-                data[k] = v
-        return data
-    except Exception:
+            raw = json.load(f)
+
+        state = {
+            "balance": float(raw.get("balance", raw.get("capital", INITIAL_CAPITAL))),
+            "paused": bool(raw.get("paused", False)),
+            "last_update_id": int(raw.get("last_update_id", 0)),
+            "open_trades": [],
+            "closed_trades": [],
+            "last_prices": raw.get("last_prices", {}) if isinstance(raw.get("last_prices"), dict) else {}
+        }
+
+        # Handle open_trades whether stored as dict {pair: trade} or list [trade]
+        raw_open = raw.get("open_trades", [])
+        if isinstance(raw_open, dict):
+            for k, v in raw_open.items():
+                nt = normalize_trade(v, fallback_pair=k)
+                if nt:
+                    state["open_trades"].append(nt)
+        elif isinstance(raw_open, list):
+            for item in raw_open:
+                nt = normalize_trade(item)
+                if nt:
+                    state["open_trades"].append(nt)
+
+        # Handle closed_trades safely
+        raw_closed = raw.get("closed_trades", [])
+        if isinstance(raw_closed, list):
+            for item in raw_closed:
+                nt = normalize_trade(item)
+                if nt:
+                    state["closed_trades"].append(nt)
+
+        return state
+    except Exception as e:
+        print(f"State Load Warning (resetting cleanly): {e}")
         return default_state
 
 
@@ -88,7 +144,6 @@ def send_excel_report(state):
         import openpyxl
         wb = openpyxl.Workbook()
 
-        # Sheet 1: Summary
         ws_sum = wb.active
         ws_sum.title = "Summary"
         closed = state["closed_trades"]
@@ -105,7 +160,6 @@ def send_excel_report(state):
         ws_sum.append(["Win Rate (%)", round(win_rate, 2)])
         ws_sum.append(["Active Open Trades", len(state["open_trades"])])
 
-        # Sheet 2: Open Trades
         ws_open = wb.create_sheet("Open Trades")
         ws_open.append(["Pair", "Direction", "Strategy", "Session", "Entry", "SL", "Target", "Units", "Opened At"])
         for t in state["open_trades"]:
@@ -114,7 +168,6 @@ def send_excel_report(state):
                 t["entry"], t["sl"], t["target"], t["units"], t["time"]
             ])
 
-        # Sheet 3: Closed Trades
         ws_closed = wb.create_sheet("Closed History")
         ws_closed.append(["Pair", "Direction", "Strategy", "Entry", "Exit", "P&L ($)", "Reason", "Closed At"])
         for t in closed:
@@ -127,7 +180,6 @@ def send_excel_report(state):
         filename = f"FINSIDE_Forex_Report_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx"
         wb.save(filename)
 
-        # Send document via multipart/form-data
         boundary = "----FinsideBoundary7MA4YWxkTrZu0gW"
         with open(filename, "rb") as f:
             file_bytes = f.read()
@@ -222,13 +274,15 @@ def process_telegram_commands(state):
             else:
                 lines = ["📂 <b>OPEN FOREX POSITIONS</b>\n"]
                 for idx, t in enumerate(state["open_trades"], 1):
-                    curr = state["last_prices"].get(t["pair"], t["entry"])
-                    diff = (curr - t["entry"]) if t["side"] == "BUY" else (t["entry"] - curr)
-                    float_pnl = diff * t["units"]
+                    pair_name = t.get("pair", "UNKNOWN")
+                    entry_px = float(t.get("entry", 0.0))
+                    curr = float(state["last_prices"].get(pair_name, entry_px))
+                    diff = (curr - entry_px) if t.get("side") == "BUY" else (entry_px - curr)
+                    float_pnl = diff * float(t.get("units", 0.0))
                     lines.append(
-                        f"{idx}. <b>{t['pair']} ({t['side']})</b>\n"
-                        f"   Entry: {t['entry']} | Live: {curr}\n"
-                        f"   SL: {t['sl']} | Target: {t['target']}\n"
+                        f"{idx}. <b>{pair_name} ({t.get('side', 'BUY')})</b>\n"
+                        f"   Entry: {entry_px} | Live: {curr}\n"
+                        f"   SL: {t.get('sl', 0)} | Target: {t.get('target', 0)}\n"
                         f"   Floating P&L: <b>${float_pnl:+.2f}</b>"
                     )
                 send_telegram("\n".join(lines))
@@ -236,9 +290,11 @@ def process_telegram_commands(state):
         elif cmd == "/virtual":
             floating_total = 0.0
             for t in state["open_trades"]:
-                curr = state["last_prices"].get(t["pair"], t["entry"])
-                diff = (curr - t["entry"]) if t["side"] == "BUY" else (t["entry"] - curr)
-                floating_total += diff * t["units"]
+                pair_name = t.get("pair", "UNKNOWN")
+                entry_px = float(t.get("entry", 0.0))
+                curr = float(state["last_prices"].get(pair_name, entry_px))
+                diff = (curr - entry_px) if t.get("side") == "BUY" else (entry_px - curr)
+                floating_total += diff * float(t.get("units", 0.0))
             equity = state["balance"] + floating_total
             send_telegram(
                 f"💼 <b>VIRTUAL WALLET SUMMARY</b>\n"
@@ -275,9 +331,11 @@ def process_telegram_commands(state):
                 closed_count = 0
                 total_realized = 0.0
                 for t in state["open_trades"]:
-                    exit_px = state["last_prices"].get(t["pair"], t["entry"])
-                    diff = (exit_px - t["entry"]) if t["side"] == "BUY" else (t["entry"] - exit_px)
-                    pnl = round(diff * t["units"], 2)
+                    pair_name = t.get("pair", "UNKNOWN")
+                    entry_px = float(t.get("entry", 0.0))
+                    exit_px = float(state["last_prices"].get(pair_name, entry_px))
+                    diff = (exit_px - entry_px) if t.get("side") == "BUY" else (entry_px - exit_px)
+                    pnl = round(diff * float(t.get("units", 0.0)), 2)
                     state["balance"] = round(state["balance"] + pnl, 2)
                     t["exit"] = exit_px
                     t["pnl"] = pnl
@@ -315,7 +373,6 @@ def fetch_candles(symbol, interval):
         if data.get("status") != "ok" or "values" not in data:
             print(f"Fetch Error ({symbol} {interval}): {data.get('message', 'Unknown error')}")
             return None
-        # Reverse to chronological order (oldest -> newest)
         candles = list(reversed(data["values"]))
         for c in candles:
             c["open"] = float(c["open"])
@@ -353,7 +410,7 @@ def calc_atr(candles, period=14):
 def manage_open_trades(state, pair, curr_price):
     remaining = []
     for t in state["open_trades"]:
-        if t["pair"] != pair:
+        if t.get("pair") != pair:
             remaining.append(t)
             continue
 
@@ -367,7 +424,7 @@ def manage_open_trades(state, pair, curr_price):
             elif curr_price >= t["target"]:
                 hit_reason = "Target Hit 🎯"
                 exit_px = t["target"]
-        else:  # SELL
+        else:
             if curr_price >= t["sl"]:
                 hit_reason = "Stop-Loss Hit"
                 exit_px = t["sl"]
@@ -402,7 +459,7 @@ def manage_open_trades(state, pair, curr_price):
 def evaluate_signal(pair, c15, c1h, state):
     if state["paused"]:
         return
-    if any(t["pair"] == pair for t in state["open_trades"]):
+    if any(t.get("pair") == pair for t in state["open_trades"]):
         return
 
     closes_15 = [c["close"] for c in c15]
@@ -421,7 +478,6 @@ def evaluate_signal(pair, c15, c1h, state):
     side = None
     strategy = None
 
-    # 1H Trend Filter + 15M EMA 9/21 Crossover
     if curr_price > ema21_1h and prev_ema9 <= prev_ema21 and ema9_15 > ema21_15:
         side = "BUY"
         strategy = "1H Trend + 15M EMA Cross"
@@ -473,10 +529,8 @@ def main():
     print(f"[{now_ist().strftime('%Y-%m-%d %H:%M IST')}] Running 5-Min Forex Scan...")
     state = load_state()
 
-    # 1. Process any pending Telegram commands first
     process_telegram_commands(state)
 
-    # 2. Scan pairs (with rate-limit spacing for Twelve Data 8 calls/min free tier)
     for idx, pair in enumerate(PAIRS):
         c15 = fetch_candles(pair, "15min")
         time.sleep(8)
