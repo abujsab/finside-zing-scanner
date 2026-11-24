@@ -10,28 +10,34 @@ from datetime import datetime, timedelta
 from SmartApi import SmartConnect
 
 # ================= 1. API & Telegram Credentials (via GitHub Secrets) =================
-API_KEY = os.environ.get("4caGhDI1", "").strip()
-CLIENT_ID = os.environ.get("J50052073", "").strip()
-PASSWORD = os.environ.get("5511", "").strip()
-TOTP_SECRET = os.environ.get("TRTNBDOK4A3SQU454GWFPRRWDQ", "").strip()
+API_KEY = os.environ.get("ANGEL_API_KEY", "").strip()
+CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID", "").strip()
+PASSWORD = os.environ.get("ANGEL_PASSWORD", "").strip()
+TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "").strip()
 
-TELEGRAM_BOT_TOKEN = os.environ.get("7951073749:AAEJbfQ5kLxfASJEwhWhif-nyUePTxLGsAI", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("7770756739", "").strip()
+TELEGRAM_BOT_TOKEN = os.environ.get("FNO_TELEGRAM_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("FNO_TELEGRAM_CHAT_ID", "").strip()
 
 WATCHLIST = [
     {"name": "NIFTY 50", "scrip_name": "NIFTY", "exchange": "NSE", "token": "99926000", "strike_step": 50, "lot_size": 75},
     {"name": "BANK NIFTY", "scrip_name": "BANKNIFTY", "exchange": "NSE", "token": "99926009", "strike_step": 100, "lot_size": 30}
 ]
 
-# ================= 2. v2.5 RISK & PROFIT PROTECTION RULES =================
+MCX_SYMBOLS = {
+    "CRUDEOIL", "CRUDEOILM", "NATURALGAS", "NATGASMINI",
+    "GOLD", "GOLDM", "GOLDGUINEA", "GOLDPETAL",
+    "SILVER", "SILVERM", "SILVERMIC", "COPPER", "ZINC", "LEAD", "ALUMINIUM"
+}
+
+# ================= 2. v2.6 RISK & PROFIT PROTECTION RULES =================
 VIRTUAL_CAPITAL = 100000.0      # ₹1,00,000 Paper Trading Wallet
 TARGET_PCT = 0.15               # Option Premium-ல் 15% Target
 DEFAULT_SL_PCT = 0.10           # Normal 10% SL
-MAX_LOSS_PER_TRADE_RS = 550.0   # ஒரு டிரேடிற்கு அதிகபட்ச நஷ்டம் ₹550 (Slippage & Spike Shield)
+MAX_LOSS_PER_TRADE_RS = 550.0   # ஒரு டிரேடிற்கு அதிகபட்ச நஷ்டம் ₹550
 MIN_SL_POINTS = 6.0             # குறைந்தபட்சம் ₹6 SL வித்தியாசம்
-TRAIL_TRIGGER_PCT = 0.06        # +6% லாபம் வந்தாலே SL-ஐ Entry விலைக்கு நகர்த்தும் (Early Risk-Free)
-MAX_DAILY_SL = 2                # ஒரு நாளைக்கு அதிகபட்சம் 2 Stop-Loss (Capital Shield)
-INDEX_PROFIT_LOCK_RS = 1500.0   # ஒரு Index-ல் +₹1,500 லாபம் வந்தால் அந்த Index அன்றைக்கு Lock ஆகும்
+TRAIL_TRIGGER_PCT = 0.06        # +6% லாபம் வந்தாலே SL-ஐ Entry விலைக்கு நகர்த்தும்
+MAX_DAILY_SL = 2                # ஒரு நாளைக்கு அதிகபட்சம் 2 Stop-Loss
+INDEX_PROFIT_LOCK_RS = 1500.0   # ஒரு Index-ல் +₹1,500 லாபம் வந்தால் Lock ஆகும்
 # ========================================================================
 
 IST = pytz.timezone('Asia/Kolkata')
@@ -45,8 +51,14 @@ eod_squareoff_done = False
 scanner_paused = False
 last_update_id = 0
 
+
 def get_ist_now():
     return datetime.now(IST)
+
+
+def is_mcx_evening_session(now_ist):
+    return 17 <= now_ist.hour <= 23
+
 
 def setup_telegram_menu():
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands"
@@ -65,6 +77,7 @@ def setup_telegram_menu():
     except Exception as e:
         print("Menu Setup Error:", e)
 
+
 def send_telegram_alert(message, reply_to_msg_id=None):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -82,6 +95,7 @@ def send_telegram_alert(message, reply_to_msg_id=None):
         print("Telegram Error:", e)
     return None
 
+
 def send_telegram_document(file_path, caption=""):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
     try:
@@ -97,6 +111,7 @@ def send_telegram_document(file_path, caption=""):
         print("Send Document Error:", e)
         return False
 
+
 def generate_and_send_excel(smart_api=None, is_eod=True):
     now_ist = get_ist_now()
     date_str = now_ist.strftime("%Y-%m-%d")
@@ -105,11 +120,12 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
     rows = []
     for idx, t in enumerate(active_trades, start=1):
         qty = t["lot_size"]
+        exch = t.get("exch_seg", "NFO")
         if t["status"] == "CLOSED":
             exit_px = t.get("exit_price", t["entry"])
             exit_time = t.get("exit_time", "-")
         else:
-            exit_px = get_option_ltp(smart_api, t["symbol"], t["token"]) if smart_api else t["entry"]
+            exit_px = get_option_ltp(smart_api, t["symbol"], t["token"], exch) if smart_api else t["entry"]
             exit_px = exit_px or t["entry"]
             exit_time = "OPEN"
 
@@ -121,7 +137,8 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
             "Date": date_str,
             "Entry Time": t.get("entry_time", "-"),
             "Exit Time": exit_time,
-            "Index": t["index_name"],
+            "Segment": exch,
+            "Index / Commodity": t["index_name"],
             "Strategy": t.get("strategy", "-"),
             "Option Symbol": t["symbol"],
             "Lot Qty": qty,
@@ -133,8 +150,8 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
         })
 
     df_trades = pd.DataFrame(rows) if rows else pd.DataFrame(columns=[
-        "Trade #", "Date", "Entry Time", "Exit Time", "Index", "Strategy",
-        "Option Symbol", "Lot Qty", "Entry Price (₹)", "Exit / Live Price (₹)",
+        "Trade #", "Date", "Entry Time", "Exit Time", "Segment", "Index / Commodity",
+        "Strategy", "Option Symbol", "Lot Qty", "Entry Price (₹)", "Exit / Live Price (₹)",
         "Points P&L", "Net P&L (₹)", "Outcome"
     ])
 
@@ -151,7 +168,7 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
     df_summary = pd.DataFrame([
         {"Metric": "Report Date", "Value": date_str},
         {"Metric": "Total Signals", "Value": total},
-        {"Metric": "Target Hits (+15%)", "Value": targets},
+        {"Metric": "Target Hits", "Value": targets},
         {"Metric": "Cost-to-Cost Exits (₹0 Loss)", "Value": cost_exits},
         {"Metric": "Stop Loss Hits", "Value": sls},
         {"Metric": "Manual / EOD Exits", "Value": manual},
@@ -166,8 +183,8 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
             df_trades.to_excel(writer, sheet_name="Trade_Log", index=False)
             df_summary.to_excel(writer, sheet_name="Daily_Summary", index=False)
 
-        tag = "EOD Final" if is_eod else "Live Interim"
-        caption = f"📥 <b>FINSIDE ZING v2.5 {tag} Excel Report ({date_str})</b>\n💼 Net P&L: <b>₹{net_pnl:,.2f}</b> | Win Rate: <b>{win_rate}%</b>"
+        tag = "Session Final" if is_eod else "Live Interim"
+        caption = f"📥 <b>FINSIDE ZING v2.6 {tag} Excel Report ({date_str})</b>\n💼 Net P&L: <b>₹{net_pnl:,.2f}</b> | Win Rate: <b>{win_rate}%</b>"
         send_telegram_document(filename, caption=caption)
     except Exception as e:
         print("Excel Generation Error:", e)
@@ -175,6 +192,7 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
     finally:
         if os.path.exists(filename):
             os.remove(filename)
+
 
 def connect_angel():
     for attempt in range(5):
@@ -189,41 +207,59 @@ def connect_angel():
             time.sleep(5)
     return None
 
+
 def load_option_master():
     global scrip_master_df
     try:
         url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
         data = requests.get(url, timeout=30).json()
         df = pd.DataFrame(data)
-        df = df[(df['exch_seg'] == 'NFO') & (df['instrumenttype'] == 'OPTIDX')]
+        # Load both NFO Index Options & MCX Commodity Options
+        df = df[
+            ((df['exch_seg'] == 'NFO') & (df['instrumenttype'] == 'OPTIDX')) |
+            ((df['exch_seg'] == 'MCX') & (df['instrumenttype'].isin(['OPTFUT', 'OPTCOM'])))
+        ].copy()
         df['expiry_dt'] = pd.to_datetime(df['expiry'], format='%d%b%Y', errors='coerce')
         df['strike_val'] = pd.to_numeric(df['strike'], errors='coerce') / 100.0
+        df['lotsize_val'] = pd.to_numeric(df['lotsize'], errors='coerce').fillna(1).astype(int)
         today = pd.to_datetime(get_ist_now().strftime('%Y-%m-%d'))
         scrip_master_df = df[df['expiry_dt'] >= today]
+        print(f"ScripMaster Loaded: {len(scrip_master_df)} active NFO/MCX option contracts.")
     except Exception as e:
         print("Scrip Master Load Error:", e)
 
-def get_nearest_option(scrip_name, strike_price, opt_type):
+
+def get_nearest_option(scrip_name, strike_price, opt_type, exch_seg="NFO", expiry_str=None):
     if scrip_master_df is None:
-        return None, None
+        return None, None, None
     sub = scrip_master_df[
+        (scrip_master_df['exch_seg'] == exch_seg) &
         (scrip_master_df['name'] == scrip_name) &
         (scrip_master_df['strike_val'] == float(strike_price)) &
         (scrip_master_df['symbol'].str.endswith(opt_type))
-    ].sort_values('expiry_dt')
+    ]
+    if expiry_str:
+        exact_exp = sub[sub['expiry'].str.upper() == expiry_str.upper()]
+        if not exact_exp.empty:
+            sub = exact_exp
+    sub = sub.sort_values('expiry_dt')
     if not sub.empty:
         row = sub.iloc[0]
-        return row['symbol'], row['token']
-    return None, None
+        return row['symbol'], row['token'], int(row['lotsize_val'])
+    return None, None, None
 
-def get_option_ltp(smart_api, symbol, token):
+
+def get_option_ltp(smart_api, symbol, token, exch_seg="NFO"):
+    if not token or token == "0":
+        return None
     try:
-        res = smart_api.ltpData("NFO", symbol, token)
+        res = smart_api.ltpData(exch_seg, symbol, token)
         if res and res.get("data"):
             return float(res["data"]["ltp"])
     except Exception as e:
-        print("LTP Fetch Error:", e)
+        print(f"LTP Fetch Error ({exch_seg} {symbol}):", e)
     return None
+
 
 def get_candle_data(smart_api, exchange, token, interval="FIVE_MINUTE", days=4):
     now_ist = get_ist_now()
@@ -244,6 +280,7 @@ def get_candle_data(smart_api, exchange, token, interval="FIVE_MINUTE", days=4):
         print(f"Candle Fetch Error ({interval}):", e)
     return None
 
+
 def calculate_supertrend(df):
     hl2 = (df['high'] + df['low']) / 2
     tr = pd.concat([
@@ -255,7 +292,7 @@ def calculate_supertrend(df):
     upperband = (hl2 + (3 * atr10)).copy()
     lowerband = (hl2 - (3 * atr10)).copy()
     st_dir = [1] * len(df)
-    
+
     for i in range(1, len(df)):
         if df['close'].iloc[i] > upperband.iloc[i-1]:
             st_dir[i] = 1
@@ -269,30 +306,31 @@ def calculate_supertrend(df):
                 upperband.iloc[i] = upperband.iloc[i-1]
     return st_dir, tr
 
+
 def add_indicators(df):
     df['ema_5'] = df['close'].ewm(span=5, adjust=False).mean()
     df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
     df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
-    
+
     delta = df['close'].diff()
     gain = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
     df['rsi'] = 100 - (100 / (1 + (gain / loss)))
-    
+
     sma20 = df['close'].rolling(20).mean()
     std20 = df['close'].rolling(20).std()
     df['bb_upper'] = sma20 + (2 * std20)
     df['bb_lower'] = sma20 - (2 * std20)
-    
+
     st_dir, tr = calculate_supertrend(df)
     df['st_dir'] = st_dir
     df['tr'] = tr
-    
+
     up_move = df['high'].diff()
     down_move = -df['low'].diff()
     plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
     minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
-    
+
     atr14 = tr.ewm(alpha=1/14, adjust=False).mean()
     df['atr14'] = atr14
     plus_di = 100 * (pd.Series(plus_dm).ewm(alpha=1/14, adjust=False).mean() / atr14)
@@ -300,6 +338,7 @@ def add_indicators(df):
     dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
     df['adx'] = dx.ewm(alpha=1/14, adjust=False).mean()
     return df
+
 
 def get_15m_trend(smart_api, exchange, token):
     now_ts = time.time()
@@ -315,11 +354,14 @@ def get_15m_trend(smart_api, exchange, token):
         return trend
     return cached["trend"] if cached else 0
 
+
 def has_open_trade_for_index(idx_name):
     return any(t["status"] == "OPEN" and t["index_name"] == idx_name for t in active_trades)
 
+
 def get_daily_sl_count():
     return sum(1 for t in active_trades if t["outcome"] == "SL")
+
 
 def get_index_realized_pnl(idx_name):
     total = 0.0
@@ -328,152 +370,164 @@ def get_index_realized_pnl(idx_name):
             total += (t.get("exit_price", t["entry"]) - t["entry"]) * t["lot_size"]
     return round(total, 2)
 
+
 def calculate_virtual_pnl(smart_api=None):
     realized_pnl = 0.0
     unrealized_pnl = 0.0
     for t in active_trades:
         qty = t["lot_size"]
+        exch = t.get("exch_seg", "NFO")
         if t["status"] == "CLOSED":
             exit_px = t.get("exit_price", t["entry"])
             realized_pnl += (exit_px - t["entry"]) * qty
         elif t["status"] == "OPEN" and smart_api:
-            ltp = get_option_ltp(smart_api, t["symbol"], t["token"]) or t["entry"]
+            ltp = get_option_ltp(smart_api, t["symbol"], t["token"], exch) or t["entry"]
             unrealized_pnl += (ltp - t["entry"]) * qty
     return round(realized_pnl, 2), round(unrealized_pnl, 2)
 
+
 def compute_protected_sl_and_trail(opt_ltp, lot_qty, is_vip_late_session=False):
-    """10% SL அல்லது Max ₹550 Cap (VIP Late Session-ல் 7% SL அல்லது ₹400 Cap)"""
     if is_vip_late_session:
         pct_sl_pts = opt_ltp * 0.07
         max_cap_pts = 400.0 / lot_qty
-        trail_pct = 0.04  # +4% Quick Trail after 2:15 PM
+        trail_pct = 0.04
     else:
         pct_sl_pts = opt_ltp * DEFAULT_SL_PCT
         max_cap_pts = MAX_LOSS_PER_TRADE_RS / lot_qty
-        trail_pct = TRAIL_TRIGGER_PCT  # +6% Early Trail
+        trail_pct = TRAIL_TRIGGER_PCT
 
     sl_points = max(MIN_SL_POINTS, min(pct_sl_pts, max_cap_pts))
     opt_sl = round(max(1.0, opt_ltp - sl_points), 1)
     trail_trigger = round(opt_ltp * (1 + trail_pct), 1)
     return opt_sl, trail_trigger, round(trail_pct * 100)
 
-# ================= ANGEL ONE NOTIFICATION PARSER (/angel) =================
+
+# ================= UNIVERSAL ANGEL ONE NOTIFICATION PARSER (/angel) =================
 def handle_angel_notification(smart_api, raw_text):
-    """MacroDroid அனுப்பும் Angel One Call Notification-ஐ ZING Filter உடன் பரிசீலிக்கும்"""
-    if scanner_paused or get_daily_sl_count() >= MAX_DAILY_SL:
-        send_telegram_alert("🛡️ <b>Angel Call Ignored:</b> Scanner Paused or Daily SL Shield Active.")
+    """
+    Parses MacroDroid forwarded Angel One notifications for BOTH NFO & MCX:
+    e.g. /angel Buy: CRUDEOIL (16 Dec 2026 CE 7550.00) Recommended Price: ₹360.00 - ₹365.00. Stop Loss: ₹320.00. Target Price: ₹435.00
+    """
+    if scanner_paused:
+        send_telegram_alert("⏸️ <b>Angel Call Ignored:</b> Scanner is currently PAUSED.")
         return
 
-    now_ist = get_ist_now()
-    if now_ist.hour >= 15:
-        send_telegram_alert("⏰ <b>Angel Call Ignored:</b> Past 3:00 PM entry cutoff.")
-        return
+    # 1. Extract Action, Symbol, Expiry, Option Type & Strike
+    header_match = re.search(
+        r'/angel\s+(Buy|Sell)\s*:\s*([A-Z0-9]+)\s*\((\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+(CE|PE)\s+([\d.]+)\)',
+        raw_text, re.IGNORECASE
+    )
 
-    upper_txt = raw_text.upper()
-    scrip = "BANKNIFTY" if "BANKNIFTY" in upper_txt else ("NIFTY" if "NIFTY" in upper_txt else None)
-    if not scrip:
-        return
-
-    item = next((w for w in WATCHLIST if w["scrip_name"] == scrip), None)
-    if not item:
-        return
-
-    if item["name"] in locked_profit_indices:
-        send_telegram_alert(f"🏆 <b>Angel Call Ignored:</b> {item['name']} Daily Profit Target (+₹{INDEX_PROFIT_LOCK_RS}) already locked!")
-        return
-
-    if has_open_trade_for_index(item["name"]):
-        send_telegram_alert(f"⏳ <b>Angel Call Ignored:</b> {item['name']} already has an OPEN trade.")
-        return
-
-    # Extract CE/PE and Strike Price
-    opt_match = re.search(r'\b(CE|PE)\s*(\d{5})', upper_txt)
-    if not opt_match:
-        opt_match_rev = re.search(r'(\d{5})\s*(CE|PE)\b', upper_txt)
-        if not opt_match_rev:
-            send_telegram_alert(f"⚠️ <b>Angel Call Parse Failed:</b> Strike/Option type not found in:\n<code>{raw_text}</code>")
-            return
-        strike_val = float(opt_match_rev.group(1))
-        opt_type = opt_match_rev.group(2)
+    if header_match:
+        action = header_match.group(1).upper()
+        scrip = header_match.group(2).upper()
+        expiry_clean = header_match.group(3).upper().replace(" ", "")  # e.g. "16DEC2026"
+        opt_type = header_match.group(4).upper()
+        strike_val = float(header_match.group(5))
     else:
-        opt_type = opt_match.group(1)
-        strike_val = float(opt_match.group(2))
+        # Fallback regex for simpler formats
+        upper_txt = raw_text.upper()
+        action = "SELL" if "SELL" in upper_txt else "BUY"
+        scrip_m = re.search(r'/ANGEL\s+(?:BUY|SELL)[:\s]+([A-Z0-9]+)', upper_txt)
+        opt_m = re.search(r'\b(CE|PE)\s*([\d.]+)', upper_txt) or re.search(r'([\d.]+)\s*(CE|PE)\b', upper_txt)
+        if not scrip_m or not opt_m:
+            send_telegram_alert(f"⚠️ <b>Angel Call Parse Failed:</b>\n<code>{raw_text}</code>")
+            return
+        scrip = scrip_m.group(1)
+        expiry_clean = None
+        if opt_m.group(1) in ("CE", "PE"):
+            opt_type, strike_val = opt_m.group(1), float(opt_m.group(2))
+        else:
+            strike_val, opt_type = float(opt_m.group(1)), opt_m.group(2)
 
-    # Extract Recommended Price Range if available
-    price_match = re.search(r'RECOMMENDED PRICE[:\s₹]*([\d.]+)\s*[-–TO]+\s*([\d.]+)', upper_txt)
-    rec_low, rec_high = (float(price_match.group(1)), float(price_match.group(2))) if price_match else (None, None)
+    exch_seg = "MCX" if scrip in MCX_SYMBOLS else "NFO"
 
-    # Check ZING 15m Trend & ADX alignment
-    htf_trend = get_15m_trend(smart_api, item["exchange"], item["token"])
-    df5 = get_candle_data(smart_api, item["exchange"], item["token"])
-    adx_val = 0.0
-    if df5 is not None and len(df5) > 20:
-        df5 = add_indicators(df5)
-        adx_val = round(df5.iloc[-2]['adx'], 1)
+    # 2. Extract Recommended Price, Stop Loss & Target directly from Angel Call
+    price_match = re.search(
+        r'Recommended Price\s*:\s*₹?\s*([\d.]+)(?:\s*[-–to]+\s*₹?\s*([\d.]+))?',
+        raw_text, re.IGNORECASE
+    )
+    sl_match = re.search(r'Stop Loss\s*:\s*₹?\s*([\d.]+)', raw_text, re.IGNORECASE)
+    tp_match = re.search(r'Target Price\s*:\s*₹?\s*([\d.]+)', raw_text, re.IGNORECASE)
 
-    expected_trend = 1 if opt_type == "CE" else -1
-    if htf_trend != expected_trend or adx_val < 20:
-        trend_str = "BULLISH 🟢" if htf_trend == 1 else ("BEARISH 🔴" if htf_trend == -1 else "NEUTRAL")
+    rec_low = float(price_match.group(1)) if price_match else None
+    rec_high = float(price_match.group(2)) if (price_match and price_match.group(2)) else rec_low
+    angel_sl = float(sl_match.group(1)) if sl_match else None
+    angel_tp = float(tp_match.group(1)) if tp_match else None
+
+    if has_open_trade_for_index(scrip):
+        send_telegram_alert(f"⏳ <b>Angel Call Ignored:</b> {scrip} already has an OPEN trade.")
+        return
+
+    # 3. Lookup Exact Contract in Angel One ScripMaster
+    opt_symbol, opt_token, master_lot = get_nearest_option(
+        scrip, strike_val, opt_type, exch_seg=exch_seg, expiry_str=expiry_clean
+    )
+
+    if not opt_symbol:
+        opt_symbol = f"{scrip}_{expiry_clean or 'NEAR'}_{int(strike_val)}{opt_type}"
+        opt_token = "0"
+        master_lot = 1
+
+    # 4. Fetch Live LTP (or fallback to Angel recommended mid-price if market closed)
+    live_ltp = get_option_ltp(smart_api, opt_symbol, opt_token, exch_seg=exch_seg)
+    entry_px = live_ltp if live_ltp else (round((rec_low + rec_high) / 2.0, 2) if rec_low else None)
+
+    if not entry_px:
+        send_telegram_alert(f"⚠️ <b>Angel Call Skipped:</b> No live LTP or recommended price found for {opt_symbol}.")
+        return
+
+    # Price chase guard (+12% max above recommended upper bound)
+    if live_ltp and rec_high and live_ltp > (rec_high * 1.12):
         send_telegram_alert(
-            f"🚫 <b>Angel One Call Rejected by ZING Filter!</b>\n"
-            f"• Call: <b>{scrip} {int(strike_val)} {opt_type}</b>\n"
-            f"• Reason: 15m Trend is <b>{trend_str}</b> & ADX is <b>{adx_val}</b> (Mismatch/Weak Momentum)"
+            f"🚫 <b>Angel Call Rejected (Price Chased):</b>\n"
+            f"• <code>{opt_symbol}</code> Live LTP ₹{live_ltp} exceeded range ₹{rec_low}–₹{rec_high}."
         )
         return
 
-    opt_symbol, opt_token = get_nearest_option(scrip, strike_val, opt_type)
-    opt_ltp = get_option_ltp(smart_api, opt_symbol, opt_token) if opt_symbol else None
-    if not opt_ltp:
-        send_telegram_alert(f"⚠️ <b>Angel Call Skipped:</b> Could not fetch live LTP for {scrip} {int(strike_val)} {opt_type}.")
-        return
+    # Use Angel One exact SL & Target if provided, else fallback to ZING % rules
+    opt_tp = angel_tp if angel_tp else round(entry_px * (1 + TARGET_PCT), 1)
+    opt_sl = angel_sl if angel_sl else round(entry_px * (1 - DEFAULT_SL_PCT), 1)
+    trail_trigger = round(entry_px + ((opt_tp - entry_px) * 0.5), 1)  # Trail to cost at 50% target progress
 
-    # Price Chase Protection (max +10% above Angel One upper recommended price)
-    if rec_high and opt_ltp > (rec_high * 1.10):
-        send_telegram_alert(
-            f"🚫 <b>Angel One Call Rejected (Price Chased):</b>\n"
-            f"• <code>{opt_symbol}</code> Live LTP ₹{opt_ltp} exceeded recommended range ₹{rec_low}–₹{rec_high}."
-        )
-        return
-
-    lot_qty = item["lot_size"]
-    opt_target = round(opt_ltp * (1 + TARGET_PCT), 1)
-    opt_sl, trail_trigger, trail_pct_lbl = compute_protected_sl_and_trail(opt_ltp, lot_qty)
-    entry_t = now_ist.strftime("%H:%M")
+    entry_t = get_ist_now().strftime("%H:%M")
     icon = "🟢" if opt_type == "CE" else "🔴"
+    ltp_note = "Live LTP" if live_ltp else "Rec. Mid-Price (Off-Market)"
 
     msg = (
-        f"{icon} <b>ZING v2.5 — ANGEL ONE CALL CONFIRMED</b>\n"
-        f"✅ <b>Matched 15m Trend + ADX ({adx_val})</b>\n"
+        f"{icon} <b>ZING v2.6 — ANGEL ONE {exch_seg} CALL ACTIVE</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📌 <b>Strategy:</b> Angel One Call (ZING Filtered)\n"
-        f"⚡ <b>Buy Option:</b> <code>{opt_symbol}</code> (1 Lot = {lot_qty})\n"
-        f"💰 <b>Entry Premium:</b> ₹{opt_ltp}\n"
-        f"🎯 <b>Target (+15%):</b> ₹{opt_target}\n"
-        f"🛑 <b>Protected SL (Max ₹550 Cap):</b> ₹{opt_sl}\n"
-        f"🔒 <b>Early Cost Trail (+{trail_pct_lbl}%):</b> ₹{trail_trigger}\n"
-        f"⏰ <b>Time:</b> {entry_t}"
+        f"📌 <b>Strategy:</b> Angel One Research Call\n"
+        f"⚡ <b>Contract:</b> <code>{opt_symbol}</code> ({exch_seg} | 1 Lot = {master_lot})\n"
+        f"💰 <b>Entry ({ltp_note}):</b> ₹{entry_px}\n"
+        f"🎯 <b>Target Price:</b> ₹{opt_tp}\n"
+        f"🛑 <b>Stop Loss:</b> ₹{opt_sl}\n"
+        f"🔒 <b>Cost Trail Trigger:</b> ₹{trail_trigger}\n"
+        f"⏰ <b>Time:</b> {entry_t} IST"
     )
     msg_id = send_telegram_alert(msg)
     if msg_id:
         active_trades.append({
-            "index_name": item["name"],
-            "strategy": "Angel One Call (Filtered)",
-            "lot_size": lot_qty,
+            "index_name": scrip,
+            "exch_seg": exch_seg,
+            "strategy": f"Angel One {exch_seg} Call",
+            "lot_size": master_lot,
             "symbol": opt_symbol,
             "token": opt_token,
-            "entry": opt_ltp,
-            "exit_price": opt_ltp,
+            "entry": entry_px,
+            "exit_price": entry_px,
             "entry_time": entry_t,
             "exit_time": "-",
-            "target": opt_target,
+            "target": opt_tp,
             "sl": opt_sl,
             "trail_trigger": trail_trigger,
-            "trail_pct_lbl": trail_pct_lbl,
+            "trail_pct_lbl": 50,
             "trailed": False,
             "msg_id": msg_id,
             "status": "OPEN",
             "outcome": "OPEN"
         })
+
 
 # ================= INTERACTIVE TELEGRAM COMMAND HANDLER =================
 def check_telegram_commands(smart_api):
@@ -499,19 +553,24 @@ def check_telegram_commands(smart_api):
                 handle_angel_notification(smart_api, raw_text)
 
             elif text.startswith("/status") or "status" in text or "market" in text:
-                lines = ["📊 <b>LIVE MARKET STATUS (v2.5)</b>\n━━━━━━━━━━━━━━━━━━━━"]
-                for item in WATCHLIST:
-                    df = get_candle_data(smart_api, item["exchange"], item["token"])
-                    if df is not None and len(df) > 20:
-                        df = add_indicators(df)
-                        curr = df.iloc[-1]
-                        htf = get_15m_trend(smart_api, item["exchange"], item["token"])
-                        trend_txt = "BULLISH 🟢" if htf == 1 else ("BEARISH 🔴" if htf == -1 else "NEUTRAL")
-                        lock_tag = " [🏆 PROFIT LOCKED]" if item["name"] in locked_profit_indices else ""
-                        lines.append(
-                            f"🔹 <b>{item['name']}{lock_tag}:</b> {curr['close']}\n"
-                            f"   15m Trend: {trend_txt} | ADX: {round(curr['adx'], 1)}"
-                        )
+                now_ist = get_ist_now()
+                lines = ["📊 <b>LIVE MARKET STATUS (v2.6)</b>\n━━━━━━━━━━━━━━━━━━━━"]
+                if is_mcx_evening_session(now_ist):
+                    lines.append("🌙 <b>Session:</b> MCX Evening Commodity Session (5:00 PM – 11:30 PM IST)")
+                    lines.append("📲 <b>Listener:</b> Ready for <code>/angel</code> MCX & NFO Calls")
+                else:
+                    for item in WATCHLIST:
+                        df = get_candle_data(smart_api, item["exchange"], item["token"])
+                        if df is not None and len(df) > 20:
+                            df = add_indicators(df)
+                            curr = df.iloc[-1]
+                            htf = get_15m_trend(smart_api, item["exchange"], item["token"])
+                            trend_txt = "BULLISH 🟢" if htf == 1 else ("BEARISH 🔴" if htf == -1 else "NEUTRAL")
+                            lock_tag = " [🏆 PROFIT LOCKED]" if item["name"] in locked_profit_indices else ""
+                            lines.append(
+                                f"🔹 <b>{item['name']}{lock_tag}:</b> {curr['close']}\n"
+                                f"   15m Trend: {trend_txt} | ADX: {round(curr['adx'], 1)}"
+                            )
                 state = "⏸️ PAUSED" if scanner_paused else "▶️ ACTIVE"
                 lines.append(f"\n🤖 <b>Scanner State:</b> {state}")
                 send_telegram_alert("\n".join(lines))
@@ -523,13 +582,14 @@ def check_telegram_commands(smart_api):
                 else:
                     lines = ["⚡ <b>ACTIVE RUNNING TRADES (1 Lot)</b>\n━━━━━━━━━━━━━━━━━━━━"]
                     for t in open_list:
-                        ltp = get_option_ltp(smart_api, t["symbol"], t["token"]) or t["entry"]
-                        diff = round(ltp - t["entry"], 1)
-                        pnl_rs = round(diff * t["lot_size"], 1)
+                        exch = t.get("exch_seg", "NFO")
+                        ltp = get_option_ltp(smart_api, t["symbol"], t["token"], exch) or t["entry"]
+                        diff = round(ltp - t["entry"], 2)
+                        pnl_rs = round(diff * t["lot_size"], 2)
                         sign = "+" if diff >= 0 else ""
                         sl_mode = "Cost-Trailed 🔒" if t["trailed"] else "Protected SL 🛑"
                         lines.append(
-                            f"📌 <code>{t['symbol']}</code> (Qty: {t['lot_size']})\n"
+                            f"📌 <code>{t['symbol']}</code> [{exch}] (Qty: {t['lot_size']})\n"
                             f"   Entry: ₹{t['entry']} | Live: ₹{ltp} ({sign}₹{diff} | <b>{sign}₹{pnl_rs}</b>)\n"
                             f"   Target: ₹{t['target']} | SL: ₹{t['sl']} ({sl_mode})"
                         )
@@ -562,15 +622,16 @@ def check_telegram_commands(smart_api):
                     now_str = get_ist_now().strftime("%H:%M")
                     closed_lines = ["🛑 <b>MANUAL EXIT EXECUTED (/closeall)</b>\n━━━━━━━━━━━━━━━━━━━━"]
                     for t in open_list:
-                        ltp = get_option_ltp(smart_api, t["symbol"], t["token"]) or t["entry"]
+                        exch = t.get("exch_seg", "NFO")
+                        ltp = get_option_ltp(smart_api, t["symbol"], t["token"], exch) or t["entry"]
                         t["status"] = "CLOSED"
                         t["outcome"] = "MANUAL_EXIT"
                         t["exit_price"] = ltp
                         t["exit_time"] = now_str
-                        pnl_rs = round((ltp - t["entry"]) * t["lot_size"], 1)
+                        pnl_rs = round((ltp - t["entry"]) * t["lot_size"], 2)
                         sign = "+" if pnl_rs >= 0 else ""
                         closed_lines.append(f"• <code>{t['symbol']}</code> closed @ ₹{ltp} ({sign}₹{pnl_rs})")
-                    closed_lines.append("\n🔓 <i>All Index Locks released. Scanner continues watching!</i>")
+                    closed_lines.append("\n🔓 <i>All Locks released. Scanner continues watching!</i>")
                     send_telegram_alert("\n".join(closed_lines))
 
             elif text.startswith("/pnl") or "pnl" in text or "report" in text:
@@ -588,7 +649,7 @@ def check_telegram_commands(smart_api):
                     net_pnl = round(realized + unrealized, 2)
                     sign = "+" if net_pnl >= 0 else ""
                     send_telegram_alert(
-                        f"🏆 <b>TODAY'S LIVE PERFORMANCE (v2.5)</b>\n"
+                        f"🏆 <b>TODAY'S LIVE PERFORMANCE (v2.6)</b>\n"
                         f"━━━━━━━━━━━━━━━━━━━━\n"
                         f"📌 Total Signals: {total} (Open: {opens})\n"
                         f"🎯 Targets: {targets} | 🛡️ Cost Exits: {cost_exits}\n"
@@ -607,9 +668,9 @@ def check_telegram_commands(smart_api):
 
             else:
                 send_telegram_alert(
-                    "🤖 <b>FINSIDE ZING v2.5 Commands:</b>\n"
-                    "• /status — Live NIFTY & BANKNIFTY Trend/ADX\n"
-                    "• /open — Check running trades & live P&L\n"
+                    "🤖 <b>FINSIDE ZING v2.6 Commands:</b>\n"
+                    "• /status — Live Trend/ADX & Session status\n"
+                    "• /open — Running NFO & MCX trades & live P&L\n"
                     "• /virtual — ₹1,00,000 Paper Trading Wallet\n"
                     "• /pnl — Today's Win/Loss & Net P&L summary\n"
                     "• /excel — Download live .xlsx report anytime\n"
@@ -618,7 +679,7 @@ def check_telegram_commands(smart_api):
                 )
     except Exception as e:
         print("Command Check Error:", e)
-# =========================================================================
+
 
 def evaluate_all_strategies(smart_api, df, item):
     global daily_sl_limit_notified
@@ -626,11 +687,9 @@ def evaluate_all_strategies(smart_api, df, item):
         return
 
     now_ist = get_ist_now()
-    # 3:00 PM-க்குப் பிறகு புது என்ட்ரி கிடையாது
     if now_ist.hour >= 15:
         return
 
-    # 2:15 PM – 3:00 PM = VIP Filter Mode (Profitable Day + ADX > 28 + 2/5 Confluence Only)
     is_vip_late_session = (now_ist.hour == 14 and now_ist.minute >= 15)
     if is_vip_late_session:
         realized_day, _ = calculate_virtual_pnl()
@@ -639,7 +698,6 @@ def evaluate_all_strategies(smart_api, df, item):
 
     idx_name = item['name']
 
-    # 1. Daily Index Profit Lock Check (+₹1,500)
     idx_pnl = get_index_realized_pnl(idx_name)
     if idx_pnl >= INDEX_PROFIT_LOCK_RS:
         if idx_name not in locked_profit_indices:
@@ -651,7 +709,6 @@ def evaluate_all_strategies(smart_api, df, item):
             )
         return
 
-    # 2. Daily Capital Shield Check (Max 2 SL)
     if get_daily_sl_count() >= MAX_DAILY_SL:
         if not daily_sl_limit_notified:
             daily_sl_limit_notified = True
@@ -669,7 +726,7 @@ def evaluate_all_strategies(smart_api, df, item):
     curr = df.iloc[-2]
     prev = df.iloc[-3]
     mother = df.iloc[-4]
-    
+
     candle_size = curr['high'] - curr['low']
     if curr['atr14'] > 0 and candle_size > (2.2 * curr['atr14']):
         return
@@ -682,7 +739,7 @@ def evaluate_all_strategies(smart_api, df, item):
     atm_strike = round(spot / item['strike_step']) * item['strike_step']
     htf_trend = get_15m_trend(smart_api, item['exchange'], item['token'])
     htf_label = "BULLISH 🟢" if htf_trend == 1 else ("BEARISH 🔴" if htf_trend == -1 else "NEUTRAL")
-    
+
     ce_strategies = []
     pe_strategies = []
 
@@ -726,7 +783,6 @@ def evaluate_all_strategies(smart_api, df, item):
     if not chosen_type:
         return
 
-    # VIP Late Session (After 2:15 PM) requires at least 2 strategies confluence
     if is_vip_late_session and len(matched_list) < 2:
         return
 
@@ -736,8 +792,8 @@ def evaluate_all_strategies(smart_api, df, item):
 
     sent_alerts.add(alert_id)
 
-    opt_symbol, opt_token = get_nearest_option(item['scrip_name'], atm_strike, chosen_type)
-    opt_ltp = get_option_ltp(smart_api, opt_symbol, opt_token) if opt_symbol else None
+    opt_symbol, opt_token, _ = get_nearest_option(item['scrip_name'], atm_strike, chosen_type, exch_seg="NFO")
+    opt_ltp = get_option_ltp(smart_api, opt_symbol, opt_token, exch_seg="NFO") if opt_symbol else None
     icon = "🟢" if chosen_type == "CE" else "🔴"
 
     if opt_ltp:
@@ -755,7 +811,7 @@ def evaluate_all_strategies(smart_api, df, item):
         cap_lbl = "₹400 VIP Cap" if is_vip_late_session else "₹550 Max Cap"
 
         msg = (
-            f"{icon} <b>ZING INSTITUTIONAL v2.5</b>\n"
+            f"{icon} <b>ZING INSTITUTIONAL v2.6</b>\n"
             f"{conviction}\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 <b>Strategy:</b> {strat_text}\n"
@@ -772,6 +828,7 @@ def evaluate_all_strategies(smart_api, df, item):
         if msg_id:
             active_trades.append({
                 "index_name": idx_name,
+                "exch_seg": "NFO",
                 "strategy": strat_text,
                 "lot_size": lot_qty,
                 "symbol": opt_symbol,
@@ -790,35 +847,34 @@ def evaluate_all_strategies(smart_api, df, item):
                 "outcome": "OPEN"
             })
 
-def auto_squareoff_eod(smart_api):
-    """3:25 PM-க்கு ஓப்பன் டிரேடுகள் இருந்தால் தானாக Square-off செய்யும்"""
-    global eod_squareoff_done
-    if eod_squareoff_done:
-        return
-    eod_squareoff_done = True
-    open_list = [t for t in active_trades if t["status"] == "OPEN"]
+
+def auto_squareoff_eod(smart_api, segment_filter="NFO"):
+    """Square-off open trades for the closing segment (NFO at 3:25 PM, MCX at 11:20 PM)"""
+    open_list = [t for t in active_trades if t["status"] == "OPEN" and t.get("exch_seg", "NFO") == segment_filter]
     if not open_list:
         return
 
     now_str = get_ist_now().strftime("%H:%M")
-    lines = ["⏰ <b>3:25 PM AUTO EOD SQUARE-OFF</b>\n━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"⏰ <b>AUTO EOD SQUARE-OFF ({segment_filter})</b>\n━━━━━━━━━━━━━━━━━━━━"]
     for t in open_list:
-        ltp = get_option_ltp(smart_api, t["symbol"], t["token"]) or t["entry"]
+        ltp = get_option_ltp(smart_api, t["symbol"], t["token"], segment_filter) or t["entry"]
         t["status"] = "CLOSED"
         t["outcome"] = "EOD_EXIT"
         t["exit_price"] = ltp
         t["exit_time"] = now_str
-        pnl_rs = round((ltp - t["entry"]) * t["lot_size"], 1)
+        pnl_rs = round((ltp - t["entry"]) * t["lot_size"], 2)
         sign = "+" if pnl_rs >= 0 else ""
         lines.append(f"• <code>{t['symbol']}</code> closed @ ₹{ltp} ({sign}₹{pnl_rs})")
     send_telegram_alert("\n".join(lines))
+
 
 def monitor_active_trades(smart_api):
     now_str = get_ist_now().strftime("%H:%M")
     for trade in active_trades:
         if trade["status"] != "OPEN":
             continue
-        ltp = get_option_ltp(smart_api, trade["symbol"], trade["token"])
+        exch = trade.get("exch_seg", "NFO")
+        ltp = get_option_ltp(smart_api, trade["symbol"], trade["token"], exch)
         if not ltp:
             continue
 
@@ -829,8 +885,8 @@ def monitor_active_trades(smart_api):
             trade["outcome"] = "TARGET"
             trade["exit_price"] = ltp
             trade["exit_time"] = now_str
-            profit_pts = round(ltp - trade["entry"], 1)
-            profit_rs = round(profit_pts * qty, 1)
+            profit_pts = round(ltp - trade["entry"], 2)
+            profit_rs = round(profit_pts * qty, 2)
             send_telegram_alert(
                 f"🎯 <b>TARGET HIT! (+₹{profit_pts} | +₹{profit_rs})</b>\n<code>{trade['symbol']}</code> reached ₹{ltp}\n🔓 <i>{trade['index_name']} unlocked for next setup.</i>",
                 reply_to_msg_id=trade["msg_id"]
@@ -840,9 +896,8 @@ def monitor_active_trades(smart_api):
         if not trade["trailed"] and ltp >= trade["trail_trigger"]:
             trade["trailed"] = True
             trade["sl"] = trade["entry"]
-            pct_lbl = trade.get("trail_pct_lbl", 6)
             send_telegram_alert(
-                f"🔒 <b>SL TRAILED TO COST (₹{trade['entry']})</b>\n<code>{trade['symbol']}</code> reached ₹{ltp} (+{pct_lbl}%). Now a Risk-Free Trade!",
+                f"🔒 <b>SL TRAILED TO COST (₹{trade['entry']})</b>\n<code>{trade['symbol']}</code> reached ₹{ltp}. Now a Risk-Free Trade!",
                 reply_to_msg_id=trade["msg_id"]
             )
             continue
@@ -859,18 +914,19 @@ def monitor_active_trades(smart_api):
                 )
             else:
                 trade["outcome"] = "SL"
-                loss_pts = round(trade["entry"] - ltp, 1)
-                loss_rs = round(loss_pts * qty, 1)
+                loss_pts = round(trade["entry"] - ltp, 2)
+                loss_rs = round(loss_pts * qty, 2)
                 sl_used = get_daily_sl_count()
                 send_telegram_alert(
                     f"🛑 <b>STOP LOSS HIT (-₹{loss_pts} | -₹{loss_rs})</b> [{sl_used}/{MAX_DAILY_SL} Daily SL]\n<code>{trade['symbol']}</code> touched ₹{ltp}\n🔓 <i>{trade['index_name']} unlocked.</i>",
                     reply_to_msg_id=trade["msg_id"]
                 )
 
-def send_eod_report(smart_api=None):
+
+def send_eod_report(smart_api=None, session_label="Session"):
     total = len(active_trades)
     if total == 0:
-        send_telegram_alert("🛑 <b>Market Closed (3:30 PM IST).</b>\nNo institutional signals triggered today.")
+        send_telegram_alert(f"🛑 <b>{session_label} Closed.</b>\nNo signals triggered during this session.")
         return
 
     targets = sum(1 for t in active_trades if t["outcome"] == "TARGET")
@@ -885,23 +941,22 @@ def send_eod_report(smart_api=None):
     sign = "+" if net_pnl >= 0 else ""
 
     report = (
-        f"📊 <b>FINSIDE ZING v2.5 - DAILY PERFORMANCE REPORT</b>\n"
+        f"📊 <b>FINSIDE ZING v2.6 - {session_label.upper()} REPORT</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"📌 <b>Total Signals:</b> {total}\n"
-        f"🎯 <b>Target Hits (+15%):</b> {targets}\n"
+        f"🎯 <b>Target Hits:</b> {targets}\n"
         f"🛡️ <b>Cost-to-Cost Exits (₹0 Loss):</b> {cost_exits}\n"
         f"🛑 <b>Stop Loss Hits:</b> {sls}\n"
         f"✋ <b>Manual / EOD Exits:</b> {manual}\n"
-        f"⏳ <b>Open at Close:</b> {open_trades}\n"
+        f"⏳ <b>Still Open:</b> {open_trades}\n"
         f"🏆 <b>Target Win Rate:</b> {win_rate}%\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💼 <b>1-Lot Virtual P&L:</b> <b>{sign}₹{net_pnl:,.2f}</b>\n"
-        f"💰 <b>Closing Virtual Balance:</b> <b>₹{final_bal:,.2f}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🛑 <i>Scanner Stopped for the Day.</i>"
+        f"💰 <b>Closing Virtual Balance:</b> <b>₹{final_bal:,.2f}</b>"
     )
     send_telegram_alert(report)
     generate_and_send_excel(smart_api=smart_api, is_eod=True)
+
 
 def run_scanner():
     now_ist = get_ist_now()
@@ -916,38 +971,61 @@ def run_scanner():
 
     setup_telegram_menu()
     load_option_master()
+
+    mcx_mode = is_mcx_evening_session(now_ist)
+    session_title = "MCX Evening Session (5:00 PM – 11:00 PM)" if mcx_mode else "NSE + MCX Day Session (9:00 AM – 3:30 PM)"
+
     send_telegram_alert(
-        "🚀 <b>FINSIDE ZING Institutional v2.5 Active!</b>\n"
-        "🛡️ <b>Protections:</b> +6% Early Trail | Max ₹550 SL Cap | +₹1,500 Index Profit Lock\n"
-        "🌟 <b>2:15 PM VIP Mode</b> & <b>/angel Call Filter</b> Enabled"
+        f"🚀 <b>FINSIDE ZING Institutional v2.6 Active!</b>\n"
+        f"🕒 <b>Mode:</b> {session_title}\n"
+        f"📲 <b>/angel Auto-Executor:</b> NFO + MCX (CRUDEOIL, GOLDM, NIFTY, BANKNIFTY) Enabled"
     )
-    
+
+    nfo_eod_done = False
+    mcx_eod_done = False
+
     while True:
         now_ist = get_ist_now()
-        if now_ist.hour > 15 or (now_ist.hour == 15 and now_ist.minute >= 30):
-            send_eod_report(smart_api)
+
+        # Stop condition for Day Session (3:30 PM IST)
+        if not mcx_mode and (now_ist.hour > 15 or (now_ist.hour == 15 and now_ist.minute >= 30)):
+            send_eod_report(smart_api, session_label="NSE Day Session")
+            break
+
+        # Stop condition for Evening MCX Session (11:00 PM IST — within GitHub 6-hr limit)
+        if mcx_mode and now_ist.hour >= 23:
+            if not mcx_eod_done:
+                mcx_eod_done = True
+                auto_squareoff_eod(smart_api, segment_filter="MCX")
+            send_eod_report(smart_api, session_label="MCX Evening Session")
             break
 
         check_telegram_commands(smart_api)
 
-        if (now_ist.hour == 9 and now_ist.minute >= 15) or (10 <= now_ist.hour <= 15):
-            try:
+        try:
+            # Always monitor any open NFO or MCX trades
+            monitor_active_trades(smart_api)
+
+            # Day Session: scan NIFTY & BANKNIFTY (9:15 AM - 3:25 PM)
+            if not mcx_mode and ((now_ist.hour == 9 and now_ist.minute >= 15) or (10 <= now_ist.hour <= 15)):
                 if now_ist.hour == 15 and now_ist.minute >= 25:
-                    auto_squareoff_eod(smart_api)
+                    if not nfo_eod_done:
+                        nfo_eod_done = True
+                        auto_squareoff_eod(smart_api, segment_filter="NFO")
                 else:
-                    monitor_active_trades(smart_api)
                     for item in WATCHLIST:
                         df = get_candle_data(smart_api, item["exchange"], item["token"])
                         if df is not None and len(df) > 25:
                             evaluate_all_strategies(smart_api, df, item)
-            except Exception as e:
-                print("Loop Error (Recovering):", e)
-                time.sleep(10)
-                new_api = connect_angel()
-                if new_api:
-                    smart_api = new_api
-                
+        except Exception as e:
+            print("Loop Error (Recovering):", e)
+            time.sleep(10)
+            new_api = connect_angel()
+            if new_api:
+                smart_api = new_api
+
         time.sleep(10)
+
 
 if __name__ == "__main__":
     run_scanner()
