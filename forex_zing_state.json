@@ -1,29 +1,13 @@
 {
   "balance": 10000.0,
   "paused": false,
-  "last_update_id": 604215576,
+  "last_update_id": 604215577,
   "open_trades": [],
-  "closed_trades": [
-    {
-      "pair": "USD/JPY",
-      "side": "BUY",
-      "strategy": "Supertrend + Prime Scalper",
-      "session": "London-NY Overlap \ud83d\udd25",
-      "entry": 159.165,
-      "sl": 159.024,
-      "target": 0.0,
-      "units": 0.0,
-      "time": "2026-11-24 19:20 IST",
-      "exit": 0.0,
-      "pnl": -0.0,
-      "reason": "Target Hit \ud83c\udfaf",
-      "closed_time": "2026-11-24 19:35 IST"
-    }
-  ],
+  "closed_trades": [],
   "last_prices": {
-    "XAU/USD": 3620.71858,
-    "EUR/USD": 1.09648,
-    "GBP/USD": 1.3103,
-    "USD/JPY": 159.137
+    "XAU/USD": 3619.38242,
+    "EUR/USD": 1.09703,
+    "GBP/USD": 1.31026,
+    "USD/JPY": 159.08532
   }
 }
