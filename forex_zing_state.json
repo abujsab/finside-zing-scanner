@@ -5,5 +5,22 @@
   "closed_trades": [],
   "last_update_id": 0,
   "last_signal_candle": {},
-  "htf_cache": {}
+  "htf_cache": {
+    "XAU/USD": {
+      "trend": "BEAR",
+      "updated_at": 1795527285.2266545
+    },
+    "EUR/USD": {
+      "trend": "BULL",
+      "updated_at": 1795527301.4669282
+    },
+    "GBP/USD": {
+      "trend": "BULL",
+      "updated_at": 1795527317.7235024
+    },
+    "USD/JPY": {
+      "trend": "BULL",
+      "updated_at": 1795527333.975232
+    }
+  }
 }
