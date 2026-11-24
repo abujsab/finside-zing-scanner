@@ -1,10 +1,27 @@
 {
   "capital": 10000.0,
   "initial_capital": 10000.0,
-  "open_trades": [],
+  "open_trades": [
+    {
+      "symbol": "USD/JPY",
+      "direction": "BUY",
+      "strategy": "Supertrend + Prime Scalper",
+      "session": "London-NY Overlap \ud83d\udd25",
+      "entry": 159.165,
+      "sl": 159.024,
+      "tp1": 159.306,
+      "tp2": 159.447,
+      "risk_amt": 100.0,
+      "decimals": 3,
+      "trailed_to_cost": false,
+      "opened_at": "2026-11-24 19:20 IST"
+    }
+  ],
   "closed_trades": [],
-  "last_update_id": 0,
-  "last_signal_candle": {},
+  "last_update_id": 604215572,
+  "last_signal_candle": {
+    "USD/JPY": "2026-11-25 00:30:00"
+  },
   "htf_cache": {
     "XAU/USD": {
       "trend": "BEAR",
