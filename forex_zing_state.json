@@ -1,43 +1,29 @@
 {
-  "capital": 10000.0,
-  "initial_capital": 10000.0,
-  "open_trades": [
+  "balance": 10000.0,
+  "paused": false,
+  "last_update_id": 604215576,
+  "open_trades": [],
+  "closed_trades": [
     {
-      "symbol": "USD/JPY",
-      "direction": "BUY",
+      "pair": "USD/JPY",
+      "side": "BUY",
       "strategy": "Supertrend + Prime Scalper",
       "session": "London-NY Overlap \ud83d\udd25",
       "entry": 159.165,
       "sl": 159.024,
-      "tp1": 159.306,
-      "tp2": 159.447,
-      "risk_amt": 100.0,
-      "decimals": 3,
-      "trailed_to_cost": false,
-      "opened_at": "2026-11-24 19:20 IST"
+      "target": 0.0,
+      "units": 0.0,
+      "time": "2026-11-24 19:20 IST",
+      "exit": 0.0,
+      "pnl": -0.0,
+      "reason": "Target Hit \ud83c\udfaf",
+      "closed_time": "2026-11-24 19:35 IST"
     }
   ],
-  "closed_trades": [],
-  "last_update_id": 604215572,
-  "last_signal_candle": {
-    "USD/JPY": "2026-11-25 00:30:00"
-  },
-  "htf_cache": {
-    "XAU/USD": {
-      "trend": "BEAR",
-      "updated_at": 1795527285.2266545
-    },
-    "EUR/USD": {
-      "trend": "BULL",
-      "updated_at": 1795527301.4669282
-    },
-    "GBP/USD": {
-      "trend": "BULL",
-      "updated_at": 1795527317.7235024
-    },
-    "USD/JPY": {
-      "trend": "BULL",
-      "updated_at": 1795527333.975232
-    }
+  "last_prices": {
+    "XAU/USD": 3620.71858,
+    "EUR/USD": 1.09648,
+    "GBP/USD": 1.3103,
+    "USD/JPY": 159.137
   }
 }
