@@ -9,9 +9,9 @@ from datetime import datetime, timezone, timedelta
 # FINSIDE ZING FOREX & GOLD 24/5 SCANNER (GITHUB ACTIONS 5-MIN FAST EDITION)
 # ==============================================================================
 
-TWELVE_DATA_API_KEY = os.environ.get("f1a371fed96f4b2f8e867a37838b8a5c", "").strip()
-TELEGRAM_BOT_TOKEN = os.environ.get("9238096863:AAFwAU6uaplz1wDhcgKK58WXkDtfN2_EDfE", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("7770756739", "").strip()
+TWELVE_DATA_API_KEY = os.environ.get("TWELVE_DATA_API_KEY", "").strip()
+TELEGRAM_BOT_TOKEN = os.environ.get("FOREX_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 
 PAIRS = ["XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY"]
 STATE_FILE = "forex_zing_state.json"
