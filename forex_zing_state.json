@@ -1,0 +1,9 @@
+{
+  "capital": 10000.0,
+  "initial_capital": 10000.0,
+  "open_trades": [],
+  "closed_trades": [],
+  "last_update_id": 0,
+  "last_signal_candle": {},
+  "htf_cache": {}
+}
