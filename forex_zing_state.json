@@ -2,7 +2,19 @@
   "balance": 9900.0,
   "paused": false,
   "last_update_id": 604215577,
-  "open_trades": [],
+  "open_trades": [
+    {
+      "pair": "XAU/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 3549.0,
+      "sl": 3566.88,
+      "target": 3519.2,
+      "units": 5.54,
+      "time": "2026-11-25 09:20 IST"
+    }
+  ],
   "closed_trades": [
     {
       "pair": "EUR/USD",
@@ -21,9 +33,9 @@
     }
   ],
   "last_prices": {
-    "XAU/USD": 3550.84834,
-    "EUR/USD": 1.09466,
-    "GBP/USD": 1.30932,
-    "USD/JPY": 159.29648
+    "XAU/USD": 3549.00004,
+    "EUR/USD": 1.09461,
+    "GBP/USD": 1.30935,
+    "USD/JPY": 159.27401
   }
 }
