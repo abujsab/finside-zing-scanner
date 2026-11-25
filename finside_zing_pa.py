@@ -36,7 +36,7 @@ MCX_LOTS = {
     "SILVERM": 5
 }
 
-# ================= 2. v2.8.1 UNIVERSAL DUAL-WALLET & RISK SHIELD =======
+# ================= 2. v2.8.2 UNIVERSAL DUAL-WALLET & RISK SHIELD =======
 FNO_VIRTUAL_CAPITAL = 100000.0      # ₹1,00,000 F&O Paper Trading Wallet
 EQUITY_VIRTUAL_CAPITAL = 100000.0   # ₹1,00,000 Equity Stock Calls Wallet
 EQUITY_MAX_RISK_RS = 500.0          # ஒரு Stock Call-க்கு அதிகபட்ச நஷ்டம் ₹500
@@ -124,7 +124,7 @@ def send_telegram_document(file_path, caption=""):
 def generate_and_send_excel(smart_api=None, is_eod=True):
     now_ist = get_ist_now()
     date_str = now_ist.strftime("%Y-%m-%d")
-    filename = f"FINSIDE_ZING_v2.8.1_{date_str}.xlsx"
+    filename = f"FINSIDE_ZING_v2.8.2_{date_str}.xlsx"
 
     fno_rows = []
     for idx, t in enumerate(active_trades, start=1):
@@ -205,7 +205,7 @@ def generate_and_send_excel(smart_api=None, is_eod=True):
 
         tag = "EOD Final" if is_eod else "Live Interim"
         caption = (
-            f"📥 <b>FINSIDE ZING v2.8.1 {tag} Excel Report ({date_str})</b>\n"
+            f"📥 <b>FINSIDE ZING v2.8.2 {tag} Excel Report ({date_str})</b>\n"
             f"💼 F&O P&L: <b>₹{fno_net:,.2f}</b> | 📈 Equity P&L: <b>₹{eq_net:,.2f}</b>"
         )
         send_telegram_document(filename, caption=caption)
@@ -245,7 +245,7 @@ def load_scrip_masters():
         today = pd.to_datetime(get_ist_now().strftime('%Y-%m-%d'))
         scrip_master_df = opt_df[opt_df['expiry_dt'] >= today]
 
-        eq_df = df[(df['exch_seg'] == 'NSE') & (df['symbol'].str.endswith('-EQ'))].copy()
+        eq_df = df[(df['exch_seg'] == 'NSE') & (df['symbol'].astype(str).str.strip().str.endswith('-EQ'))].copy()
         equity_master_df = eq_df
     except Exception as e:
         print("Scrip Master Load Error:", e)
@@ -259,15 +259,26 @@ def get_ltp(smart_api, symbol, token, exch_seg="NFO"):
         print("LTP Fetch Error:", e)
     return None
 
-def get_equity_symbol_token(stock_name):
-    if equity_master_df is None:
-        return None, None
+def get_equity_symbol_token(smart_api, stock_name):
     clean_name = re.sub(r'[^A-Z0-9&-]', '', stock_name.upper().replace("-EQ", ""))
-    sub = equity_master_df[equity_master_df['symbol'] == f"{clean_name}-EQ"]
-    if sub.empty:
-        sub = equity_master_df[equity_master_df['name'] == clean_name]
-    if not sub.empty:
-        return sub.iloc[0]['symbol'], str(sub.iloc[0]['token'])
+    # 1. Try local ScripMaster first
+    if equity_master_df is not None and not equity_master_df.empty:
+        sub = equity_master_df[equity_master_df['symbol'].astype(str).str.strip() == f"{clean_name}-EQ"]
+        if sub.empty:
+            sub = equity_master_df[equity_master_df['name'].astype(str).str.strip() == clean_name]
+        if not sub.empty:
+            return sub.iloc[0]['symbol'].strip(), str(sub.iloc[0]['token']).strip()
+    # 2. Fallback to Angel One live searchScrip API
+    try:
+        time.sleep(0.4)
+        res = smart_api.searchScrip("NSE", clean_name)
+        if res and res.get("data"):
+            for item in res["data"]:
+                tsym = str(item.get("tradingsymbol", "")).strip()
+                if tsym == f"{clean_name}-EQ" or tsym.endswith("-EQ"):
+                    return tsym, str(item["symboltoken"]).strip()
+    except Exception as e:
+        print("searchScrip Error:", e)
     return None, None
 
 def get_optimal_option(smart_api, scrip_name, atm_strike, strike_step, opt_type):
@@ -422,7 +433,7 @@ def get_15m_trend(smart_api, exchange, token):
         htf_cache[token] = {"trend": trend, "time": now_ts}
         return trend
 
-    # Fallback to 5-minute Supertrend if 15m data is unavailable for a specific stock
+    time.sleep(0.4)
     df5 = get_candle_data(smart_api, exchange, token, interval="FIVE_MINUTE", days=5)
     if df5 is not None and len(df5) > 15:
         st_dir, _ = calculate_supertrend(df5)
@@ -502,229 +513,238 @@ def detect_broker_name(upper_txt):
 
 # ================= UNIVERSAL EQUITY STOCK CALL HANDLER (₹1L EQUITY WALLET) =================
 def handle_broker_equity_call(smart_api, raw_text, broker_name):
-    if get_equity_sl_count() >= MAX_EQUITY_SL_PER_DAY:
-        send_telegram_alert(f"🛡️ <b>{broker_name} Equity Call Ignored:</b> Daily Equity SL Limit (3/3) reached.")
-        return
+    try:
+        if get_equity_sl_count() >= MAX_EQUITY_SL_PER_DAY:
+            send_telegram_alert(f"🛡️ <b>{broker_name} Equity Call Ignored:</b> Daily Equity SL Limit (3/3) reached.")
+            return
 
-    upper_txt = raw_text.upper()
+        upper_txt = raw_text.upper()
 
-    sym_match = re.search(r'(?:BUY|NAME|SCRIP|STOCK)[:\s-]+([A-Z0-9&-]{2,20})', upper_txt)
-    sl_match = re.search(r'(?:STOP\s*LOSS|SL)[:\s₹-]*([\d.]+)', upper_txt)
-    tgt_match = re.search(r'(?:TARGET\s*PRICE|TARGET|TGT)[:\s₹-]*([\d.]+)', upper_txt)
+        sym_match = re.search(r'(?:BUY|NAME|SCRIP|STOCK)[:\s-]+([A-Z0-9&-]{2,20})', upper_txt)
+        sl_match = re.search(r'(?:STOP\s*LOSS|SL)[:\s₹-]*([\d.]+)', upper_txt)
+        tgt_match = re.search(r'(?:TARGET\s*PRICE|TARGET|TGT)[:\s₹-]*([\d.]+)', upper_txt)
 
-    if not (sym_match and sl_match and tgt_match):
-        send_telegram_alert(f"⚠️ <b>{broker_name} Equity Parse Failed:</b> Missing Symbol/SL/Target in:\n<code>{raw_text}</code>")
-        return
+        if not (sym_match and sl_match and tgt_match):
+            send_telegram_alert(f"⚠️ <b>{broker_name} Equity Parse Failed:</b> Missing Symbol/SL/Target in:\n<code>{raw_text}</code>")
+            return
 
-    stock_raw = sym_match.group(1)
-    sl_price = float(sl_match.group(1))
-    tgt_price = float(tgt_match.group(1))
+        stock_raw = sym_match.group(1)
+        sl_price = float(sl_match.group(1))
+        tgt_price = float(tgt_match.group(1))
 
-    eq_symbol, eq_token = get_equity_symbol_token(stock_raw)
-    if not eq_symbol:
-        send_telegram_alert(f"⚠️ <b>{broker_name} Equity Skipped:</b> NSE symbol not found for <b>{stock_raw}</b>.")
-        return
+        eq_symbol, eq_token = get_equity_symbol_token(smart_api, stock_raw)
+        if not eq_symbol:
+            send_telegram_alert(f"⚠️ <b>{broker_name} Equity Skipped:</b> NSE symbol not found for <b>{stock_raw}</b>.")
+            return
 
-    if any(t["status"] == "OPEN" and t["symbol"] == eq_symbol for t in active_equity_trades):
-        send_telegram_alert(f"⏳ <b>{broker_name} Equity Ignored:</b> <code>{eq_symbol}</code> is already OPEN.")
-        return
+        if any(t["status"] == "OPEN" and t["symbol"] == eq_symbol for t in active_equity_trades):
+            send_telegram_alert(f"⏳ <b>{broker_name} Equity Ignored:</b> <code>{eq_symbol}</code> is already OPEN.")
+            return
 
-    htf_trend = get_15m_trend(smart_api, "NSE", eq_token)
-    if htf_trend == -1:
-        send_telegram_alert(
-            f"🚫 <b>{broker_name} Equity Call Rejected by ZING Filter!</b>\n"
-            f"• Stock: <code>{eq_symbol}</code>\n"
-            f"• Reason: 15m Supertrend is <b>BEARISH 🔴</b> (Avoiding falling knife)."
+        time.sleep(0.4)
+        htf_trend = get_15m_trend(smart_api, "NSE", eq_token)
+        if htf_trend == -1:
+            send_telegram_alert(
+                f"🚫 <b>{broker_name} Equity Call Rejected by ZING Filter!</b>\n"
+                f"• Stock: <code>{eq_symbol}</code>\n"
+                f"• Reason: 15m Supertrend is <b>BEARISH 🔴</b> (Avoiding falling knife)."
+            )
+            return
+
+        time.sleep(0.4)
+        ltp = get_ltp(smart_api, eq_symbol, eq_token, "NSE")
+        if not ltp:
+            send_telegram_alert(f"⚠️ <b>{broker_name} Equity Skipped:</b> Live LTP unavailable for <code>{eq_symbol}</code>.")
+            return
+
+        if ltp <= sl_price or ltp >= tgt_price:
+            send_telegram_alert(f"🚫 <b>{broker_name} Equity Skipped:</b> Live price ₹{ltp} outside SL ₹{sl_price} – Target ₹{tgt_price}.")
+            return
+
+        risk_per_share = ltp - sl_price
+        qty_by_risk = int(EQUITY_MAX_RISK_RS // risk_per_share)
+        qty_by_cap = int(EQUITY_MAX_EXPOSURE_RS // ltp)
+        qty = max(1, min(qty_by_risk, qty_by_cap))
+
+        halfway_price = round(ltp + ((tgt_price - ltp) * 0.5), 2)
+        entry_t = get_ist_now().strftime("%H:%M")
+        max_risk_actual = round(risk_per_share * qty, 1)
+
+        msg = (
+            f"📈 <b>ZING EQUITY CALL EXECUTED ({broker_name})</b>\n"
+            f"✅ <b>Trend Filter Passed (BULLISH 🟢)</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏢 <b>Stock:</b> <code>{eq_symbol}</code> (Qty: <b>{qty} Shares</b>)\n"
+            f"💰 <b>Entry Price:</b> ₹{ltp}\n"
+            f"🎯 <b>Target Price:</b> ₹{tgt_price} (+₹{round((tgt_price-ltp)*qty, 1)})\n"
+            f"🛑 <b>Stop Loss:</b> ₹{sl_price} (-₹{max_risk_actual} Max Risk)\n"
+            f"🔒 <b>50% Target Cost-Trail:</b> ₹{halfway_price}\n"
+            f"⏰ <b>Time:</b> {entry_t}"
         )
-        return
-
-    ltp = get_ltp(smart_api, eq_symbol, eq_token, "NSE")
-    if not ltp:
-        send_telegram_alert(f"⚠️ <b>{broker_name} Equity Skipped:</b> Live LTP unavailable for <code>{eq_symbol}</code>.")
-        return
-
-    if ltp <= sl_price or ltp >= tgt_price:
-        send_telegram_alert(f"🚫 <b>{broker_name} Equity Skipped:</b> Live price ₹{ltp} outside SL ₹{sl_price} – Target ₹{tgt_price}.")
-        return
-
-    risk_per_share = ltp - sl_price
-    qty_by_risk = int(EQUITY_MAX_RISK_RS // risk_per_share)
-    qty_by_cap = int(EQUITY_MAX_EXPOSURE_RS // ltp)
-    qty = max(1, min(qty_by_risk, qty_by_cap))
-
-    halfway_price = round(ltp + ((tgt_price - ltp) * 0.5), 2)
-    entry_t = get_ist_now().strftime("%H:%M")
-    max_risk_actual = round(risk_per_share * qty, 1)
-
-    msg = (
-        f"📈 <b>ZING EQUITY CALL EXECUTED ({broker_name})</b>\n"
-        f"✅ <b>Trend Filter Passed (BULLISH 🟢)</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🏢 <b>Stock:</b> <code>{eq_symbol}</code> (Qty: <b>{qty} Shares</b>)\n"
-        f"💰 <b>Entry Price:</b> ₹{ltp}\n"
-        f"🎯 <b>Target Price:</b> ₹{tgt_price} (+₹{round((tgt_price-ltp)*qty, 1)})\n"
-        f"🛑 <b>Stop Loss:</b> ₹{sl_price} (-₹{max_risk_actual} Max Risk)\n"
-        f"🔒 <b>50% Target Cost-Trail:</b> ₹{halfway_price}\n"
-        f"⏰ <b>Time:</b> {entry_t}"
-    )
-    msg_id = send_telegram_alert(msg)
-    if msg_id:
-        active_equity_trades.append({
-            "broker": broker_name,
-            "symbol": eq_symbol,
-            "token": eq_token,
-            "qty": qty,
-            "entry": ltp,
-            "exit_price": ltp,
-            "target": tgt_price,
-            "sl": sl_price,
-            "halfway": halfway_price,
-            "cost_trailed": False,
-            "entry_time": entry_t,
-            "exit_time": "-",
-            "msg_id": msg_id,
-            "status": "OPEN",
-            "outcome": "OPEN"
-        })
+        msg_id = send_telegram_alert(msg)
+        if msg_id:
+            active_equity_trades.append({
+                "broker": broker_name,
+                "symbol": eq_symbol,
+                "token": eq_token,
+                "qty": qty,
+                "entry": ltp,
+                "exit_price": ltp,
+                "target": tgt_price,
+                "sl": sl_price,
+                "halfway": halfway_price,
+                "cost_trailed": False,
+                "entry_time": entry_t,
+                "exit_time": "-",
+                "msg_id": msg_id,
+                "status": "OPEN",
+                "outcome": "OPEN"
+            })
+    except Exception as e:
+        send_telegram_alert(f"⚠️ <b>{broker_name} Equity Handler Error:</b> <code>{e}</code>")
 
 # ================= UNIVERSAL BROKER CALL ROUTER (ANGEL ONE + ALICE BLUE) =================
 def handle_broker_notification(smart_api, raw_text):
-    upper_txt = raw_text.upper()
-    broker_name = detect_broker_name(upper_txt)
+    try:
+        upper_txt = raw_text.upper()
+        broker_name = detect_broker_name(upper_txt)
 
-    if scanner_paused:
-        send_telegram_alert(f"⏸️ <b>{broker_name} Call Ignored:</b> Scanner is currently Paused.")
-        return
-
-    now_ist = get_ist_now()
-    if now_ist.hour >= 15:
-        send_telegram_alert(f"⏰ <b>{broker_name} Call Ignored:</b> Past 3:00 PM entry cutoff.")
-        return
-
-    supported_opt = ["BANKNIFTY", "NIFTY"] + list(MCX_LOTS.keys())
-    scrip = next((s for s in supported_opt if s in upper_txt), None)
-
-    if not scrip:
-        handle_broker_equity_call(smart_api, raw_text, broker_name)
-        return
-
-    if get_daily_sl_count() >= MAX_DAILY_SL:
-        send_telegram_alert(f"🛡️ <b>{broker_name} F&O Call Ignored:</b> Daily F&O SL Shield (2/2) Active.")
-        return
-
-    exch_seg = "MCX" if scrip in MCX_LOTS else "NFO"
-    idx_display = "BANK NIFTY" if scrip == "BANKNIFTY" else ("NIFTY 50" if scrip == "NIFTY" else scrip)
-
-    if idx_display in locked_profit_indices:
-        send_telegram_alert(f"🏆 <b>{broker_name} Call Ignored:</b> {idx_display} Daily Profit Target already locked!")
-        return
-
-    if has_open_trade_for_index(idx_display):
-        send_telegram_alert(f"⏳ <b>{broker_name} Call Ignored:</b> {idx_display} already has an OPEN trade.")
-        return
-
-    opt_match = re.search(r'\b(CE|PE)\s*(\d{4,6})', upper_txt)
-    if not opt_match:
-        opt_match_rev = re.search(r'(\d{4,6})\s*(CE|PE)\b', upper_txt)
-        if not opt_match_rev:
-            send_telegram_alert(f"⚠️ <b>{broker_name} Option Parse Failed:</b> Strike/Option type not found in:\n<code>{raw_text}</code>")
-            return
-        strike_val = float(opt_match_rev.group(1))
-        opt_type = opt_match_rev.group(2)
-    else:
-        opt_type = opt_match.group(1)
-        strike_val = float(opt_match.group(2))
-
-    if exch_seg == "NFO":
-        item = next((w for w in WATCHLIST if w["scrip_name"] == scrip), None)
-        htf_trend = get_15m_trend(smart_api, item["exchange"], item["token"])
-        df5 = get_candle_data(smart_api, item["exchange"], item["token"], days=7)
-        adx_val = 25.0
-        if df5 is not None and len(df5) > 20:
-            df5 = add_indicators(df5)
-            raw_adx = df5.iloc[-2]['adx']
-            if pd.notna(raw_adx):
-                adx_val = round(float(raw_adx), 1)
-        expected_trend = 1 if opt_type == "CE" else -1
-        if htf_trend != expected_trend or adx_val < 20:
-            trend_str = "BULLISH 🟢" if htf_trend == 1 else ("BEARISH 🔴" if htf_trend == -1 else "NEUTRAL")
-            send_telegram_alert(
-                f"🚫 <b>{broker_name} Option Call Rejected by ZING Filter!</b>\n"
-                f"• Call: <b>{scrip} {int(strike_val)} {opt_type}</b>\n"
-                f"• Reason: 15m Trend is <b>{trend_str}</b> & ADX is <b>{adx_val}</b>"
-            )
-            return
-        lot_qty = item["lot_size"]
-    else:
-        lot_qty = MCX_LOTS[scrip]
-
-    opt_symbol, opt_token = get_specific_option(scrip, strike_val, opt_type, exch_seg=exch_seg)
-    opt_ltp = get_ltp(smart_api, opt_symbol, opt_token, exch_seg=exch_seg) if opt_symbol else None
-    if not opt_ltp:
-        send_telegram_alert(f"⚠️ <b>{broker_name} Call Skipped:</b> Live LTP unavailable for {scrip} {int(strike_val)} {opt_type}.")
-        return
-
-    angel_price = re.search(r'RECOMMENDED PRICE[:\s₹]*([\d.]+)\s*[-–TO]+\s*([\d.]+)', upper_txt)
-    alice_entry = re.search(r'\bENTRY[:\s₹-]+([\d.]+)', upper_txt)
-
-    if angel_price:
-        rec_high = float(angel_price.group(2))
-        if opt_ltp > (rec_high * 1.10):
-            send_telegram_alert(
-                f"🚫 <b>{broker_name} Call Rejected (Price Chased):</b>\n"
-                f"• <code>{opt_symbol}</code> Live ₹{opt_ltp} > Recommended ₹{rec_high}."
-            )
-            return
-    elif alice_entry:
-        rec_entry = float(alice_entry.group(1))
-        if opt_ltp > (rec_entry * 1.10):
-            send_telegram_alert(
-                f"🚫 <b>{broker_name} Call Rejected (Price Chased):</b>\n"
-                f"• <code>{opt_symbol}</code> Live ₹{opt_ltp} > Entry ₹{rec_entry}."
-            )
+        if scanner_paused:
+            send_telegram_alert(f"⏸️ <b>{broker_name} Call Ignored:</b> Scanner is currently Paused.")
             return
 
-    opt_target = round(opt_ltp * (1 + TARGET_PCT), 1)
-    opt_sl, t_step1, t_step2, p_lock_sl = compute_protected_sl_and_trails(opt_ltp, lot_qty)
-    entry_t = now_ist.strftime("%H:%M")
-    icon = "🟢" if opt_type == "CE" else "🔴"
+        now_ist = get_ist_now()
+        if now_ist.hour >= 15:
+            send_telegram_alert(f"⏰ <b>{broker_name} Call Ignored:</b> Past 3:00 PM entry cutoff.")
+            return
 
-    msg = (
-        f"{icon} <b>ZING v2.8.1 — {broker_name.upper()} CALL CONFIRMED</b>\n"
-        f"✅ <b>ZING Trend & Risk Filter Passed</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📌 <b>Source:</b> {broker_name} Call ({exch_seg})\n"
-        f"⚡ <b>Buy Option:</b> <code>{opt_symbol}</code> (1 Lot = {lot_qty})\n"
-        f"💰 <b>Entry Premium:</b> ₹{opt_ltp}\n"
-        f"🎯 <b>Target (+15%):</b> ₹{opt_target}\n"
-        f"🛑 <b>Protected SL (Max ₹550):</b> ₹{opt_sl}\n"
-        f"🔒 <b>Trail Step 1 (+6% Cost):</b> ₹{t_step1}\n"
-        f"💰 <b>Trail Step 2 (+10% → +5% Lock):</b> ₹{t_step2} (SL → ₹{p_lock_sl})\n"
-        f"⏰ <b>Time:</b> {entry_t}"
-    )
-    msg_id = send_telegram_alert(msg)
-    if msg_id:
-        active_trades.append({
-            "index_name": idx_display,
-            "exch_seg": exch_seg,
-            "strategy": f"{broker_name} Call ({exch_seg})",
-            "lot_size": lot_qty,
-            "symbol": opt_symbol,
-            "token": opt_token,
-            "entry": opt_ltp,
-            "exit_price": opt_ltp,
-            "entry_time": entry_t,
-            "exit_time": "-",
-            "target": opt_target,
-            "sl": opt_sl,
-            "trail_step1": t_step1,
-            "trail_step2": t_step2,
-            "profit_lock_sl": p_lock_sl,
-            "trail_stage": 0,
-            "msg_id": msg_id,
-            "status": "OPEN",
-            "outcome": "OPEN"
-        })
+        supported_opt = ["BANKNIFTY", "NIFTY"] + list(MCX_LOTS.keys())
+        scrip = next((s for s in supported_opt if s in upper_txt), None)
+
+        if not scrip:
+            handle_broker_equity_call(smart_api, raw_text, broker_name)
+            return
+
+        if get_daily_sl_count() >= MAX_DAILY_SL:
+            send_telegram_alert(f"🛡️ <b>{broker_name} F&O Call Ignored:</b> Daily F&O SL Shield (2/2) Active.")
+            return
+
+        exch_seg = "MCX" if scrip in MCX_LOTS else "NFO"
+        idx_display = "BANK NIFTY" if scrip == "BANKNIFTY" else ("NIFTY 50" if scrip == "NIFTY" else scrip)
+
+        if idx_display in locked_profit_indices:
+            send_telegram_alert(f"🏆 <b>{broker_name} Call Ignored:</b> {idx_display} Daily Profit Target already locked!")
+            return
+
+        if has_open_trade_for_index(idx_display):
+            send_telegram_alert(f"⏳ <b>{broker_name} Call Ignored:</b> {idx_display} already has an OPEN trade.")
+            return
+
+        opt_match = re.search(r'\b(CE|PE)\s*(\d{4,6})', upper_txt)
+        if not opt_match:
+            opt_match_rev = re.search(r'(\d{4,6})\s*(CE|PE)\b', upper_txt)
+            if not opt_match_rev:
+                send_telegram_alert(f"⚠️ <b>{broker_name} Option Parse Failed:</b> Strike/Option type not found in:\n<code>{raw_text}</code>")
+                return
+            strike_val = float(opt_match_rev.group(1))
+            opt_type = opt_match_rev.group(2)
+        else:
+            opt_type = opt_match.group(1)
+            strike_val = float(opt_match.group(2))
+
+        if exch_seg == "NFO":
+            item = next((w for w in WATCHLIST if w["scrip_name"] == scrip), None)
+            htf_trend = get_15m_trend(smart_api, item["exchange"], item["token"])
+            time.sleep(0.4)
+            df5 = get_candle_data(smart_api, item["exchange"], item["token"], days=7)
+            adx_val = 25.0
+            if df5 is not None and len(df5) > 20:
+                df5 = add_indicators(df5)
+                raw_adx = df5.iloc[-2]['adx']
+                if pd.notna(raw_adx):
+                    adx_val = round(float(raw_adx), 1)
+            expected_trend = 1 if opt_type == "CE" else -1
+            if htf_trend != expected_trend or adx_val < 20:
+                trend_str = "BULLISH 🟢" if htf_trend == 1 else ("BEARISH 🔴" if htf_trend == -1 else "NEUTRAL")
+                send_telegram_alert(
+                    f"🚫 <b>{broker_name} Option Call Rejected by ZING Filter!</b>\n"
+                    f"• Call: <b>{scrip} {int(strike_val)} {opt_type}</b>\n"
+                    f"• Reason: 15m Trend is <b>{trend_str}</b> & ADX is <b>{adx_val}</b>"
+                )
+                return
+            lot_qty = item["lot_size"]
+        else:
+            lot_qty = MCX_LOTS[scrip]
+
+        opt_symbol, opt_token = get_specific_option(scrip, strike_val, opt_type, exch_seg=exch_seg)
+        opt_ltp = get_ltp(smart_api, opt_symbol, opt_token, exch_seg=exch_seg) if opt_symbol else None
+        if not opt_ltp:
+            send_telegram_alert(f"⚠️ <b>{broker_name} Call Skipped:</b> Live LTP unavailable for {scrip} {int(strike_val)} {opt_type}.")
+            return
+
+        angel_price = re.search(r'RECOMMENDED PRICE[:\s₹]*([\d.]+)\s*[-–TO]+\s*([\d.]+)', upper_txt)
+        alice_entry = re.search(r'\bENTRY[:\s₹-]+([\d.]+)', upper_txt)
+
+        if angel_price:
+            rec_high = float(angel_price.group(2))
+            if opt_ltp > (rec_high * 1.10):
+                send_telegram_alert(
+                    f"🚫 <b>{broker_name} Call Rejected (Price Chased):</b>\n"
+                    f"• <code>{opt_symbol}</code> Live ₹{opt_ltp} > Recommended ₹{rec_high}."
+                )
+                return
+        elif alice_entry:
+            rec_entry = float(alice_entry.group(1))
+            if opt_ltp > (rec_entry * 1.10):
+                send_telegram_alert(
+                    f"🚫 <b>{broker_name} Call Rejected (Price Chased):</b>\n"
+                    f"• <code>{opt_symbol}</code> Live ₹{opt_ltp} > Entry ₹{rec_entry}."
+                )
+                return
+
+        opt_target = round(opt_ltp * (1 + TARGET_PCT), 1)
+        opt_sl, t_step1, t_step2, p_lock_sl = compute_protected_sl_and_trails(opt_ltp, lot_qty)
+        entry_t = now_ist.strftime("%H:%M")
+        icon = "🟢" if opt_type == "CE" else "🔴"
+
+        msg = (
+            f"{icon} <b>ZING v2.8.2 — {broker_name.upper()} CALL CONFIRMED</b>\n"
+            f"✅ <b>ZING Trend & Risk Filter Passed</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📌 <b>Source:</b> {broker_name} Call ({exch_seg})\n"
+            f"⚡ <b>Buy Option:</b> <code>{opt_symbol}</code> (1 Lot = {lot_qty})\n"
+            f"💰 <b>Entry Premium:</b> ₹{opt_ltp}\n"
+            f"🎯 <b>Target (+15%):</b> ₹{opt_target}\n"
+            f"🛑 <b>Protected SL (Max ₹550):</b> ₹{opt_sl}\n"
+            f"🔒 <b>Trail Step 1 (+6% Cost):</b> ₹{t_step1}\n"
+            f"💰 <b>Trail Step 2 (+10% → +5% Lock):</b> ₹{t_step2} (SL → ₹{p_lock_sl})\n"
+            f"⏰ <b>Time:</b> {entry_t}"
+        )
+        msg_id = send_telegram_alert(msg)
+        if msg_id:
+            active_trades.append({
+                "index_name": idx_display,
+                "exch_seg": exch_seg,
+                "strategy": f"{broker_name} Call ({exch_seg})",
+                "lot_size": lot_qty,
+                "symbol": opt_symbol,
+                "token": opt_token,
+                "entry": opt_ltp,
+                "exit_price": opt_ltp,
+                "entry_time": entry_t,
+                "exit_time": "-",
+                "target": opt_target,
+                "sl": opt_sl,
+                "trail_step1": t_step1,
+                "trail_step2": t_step2,
+                "profit_lock_sl": p_lock_sl,
+                "trail_stage": 0,
+                "msg_id": msg_id,
+                "status": "OPEN",
+                "outcome": "OPEN"
+            })
+    except Exception as e:
+        send_telegram_alert(f"⚠️ <b>Broker Call Handler Error:</b> <code>{e}</code>")
 
 # ================= INTERACTIVE TELEGRAM COMMAND HANDLER =================
 def check_telegram_commands(smart_api):
@@ -750,7 +770,7 @@ def check_telegram_commands(smart_api):
                 handle_broker_notification(smart_api, raw_text)
 
             elif text.startswith("/status") or "status" in text:
-                lines = ["📊 <b>LIVE MARKET STATUS (v2.8.1 Universal Dual-Wallet)</b>\n━━━━━━━━━━━━━━━━━━━━"]
+                lines = ["📊 <b>LIVE MARKET STATUS (v2.8.2 Universal Dual-Wallet)</b>\n━━━━━━━━━━━━━━━━━━━━"]
                 for item in WATCHLIST:
                     df = get_candle_data(smart_api, item["exchange"], item["token"], days=7)
                     if df is not None and len(df) > 20:
@@ -869,7 +889,7 @@ def check_telegram_commands(smart_api):
                 sls = sum(1 for t in active_trades if t["outcome"] == "SL")
 
                 send_telegram_alert(
-                    f"🏆 <b>TODAY'S COMBINED PERFORMANCE (v2.8.1)</b>\n"
+                    f"🏆 <b>TODAY'S COMBINED PERFORMANCE (v2.8.2)</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"💼 <b>F&O Wallet P&L:</b> {'+' if fno_net>=0 else ''}₹{fno_net:,.2f}\n"
                     f"   (Signals: {len(active_trades)} | 🎯 {targets} | 💰 {p_locks} | 🛡️ {c_exits} | 🛑 {sls})\n"
@@ -889,7 +909,7 @@ def check_telegram_commands(smart_api):
 
             else:
                 send_telegram_alert(
-                    "🤖 <b>FINSIDE ZING v2.8.1 Universal Commands:</b>\n"
+                    "🤖 <b>FINSIDE ZING v2.8.2 Universal Commands:</b>\n"
                     "• /virtual — ₹1,00,000 F&O Wallet P&L\n"
                     "• /equity — ₹1,00,000 Equity Stock Calls Wallet\n"
                     "• /pnl — Combined F&O + Equity Summary\n"
@@ -1035,7 +1055,7 @@ def evaluate_all_strategies(smart_api, df, item):
         cap_lbl = "₹400 VIP Cap" if is_vip_late_session else "₹550 Max Cap"
 
         msg = (
-            f"{icon} <b>ZING INSTITUTIONAL v2.8.1</b>\n"
+            f"{icon} <b>ZING INSTITUTIONAL v2.8.2</b>\n"
             f"{conviction}\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 <b>Strategy:</b> {strat_text}\n"
@@ -1236,7 +1256,7 @@ def send_eod_report(smart_api=None):
     tot_net = round(fno_net + eq_net, 2)
 
     report = (
-        f"📊 <b>FINSIDE ZING v2.8.1 - DUAL-WALLET EOD REPORT</b>\n"
+        f"📊 <b>FINSIDE ZING v2.8.2 - DUAL-WALLET EOD REPORT</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💼 <b>F&O Wallet (₹1L):</b> <b>{'+' if fno_net>=0 else ''}₹{fno_net:,.2f}</b> (Balance: ₹{FNO_VIRTUAL_CAPITAL + fno_net:,.2f})\n"
         f"   • Signals: {len(active_trades)} | 🎯 {sum(1 for t in active_trades if t['outcome']=='TARGET')} | 💰 {sum(1 for t in active_trades if t['outcome']=='PROFIT_LOCK_EXIT')} | 🛡️ {sum(1 for t in active_trades if t['outcome']=='COST_EXIT')} | 🛑 {sum(1 for t in active_trades if t['outcome']=='SL')}\n\n"
@@ -1263,7 +1283,7 @@ def run_scanner():
     setup_telegram_menu()
     load_scrip_masters()
     send_telegram_alert(
-        "🚀 <b>FINSIDE ZING Institutional v2.8.1 (Universal Dual-Wallet) Active!</b>\n"
+        "🚀 <b>FINSIDE ZING Institutional v2.8.2 (Universal Dual-Wallet) Active!</b>\n"
         "📲 <b>Brokers Connected:</b> Angel One + Alice Blue (ANT) Auto-Parser\n"
         "💼 <b>F&O Wallet:</b> ₹1,00,000 (+6% Cost Trail → +10% locks +5% Profit)\n"
         "📈 <b>Equity Wallet:</b> ₹1,00,000 (Stock Calls @ ₹500 Max Risk)"
