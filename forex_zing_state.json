@@ -2,7 +2,19 @@
   "balance": 9964.44,
   "paused": false,
   "last_update_id": 604215578,
-  "open_trades": [],
+  "open_trades": [
+    {
+      "pair": "USD/JPY",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 159.187,
+      "sl": 159.072,
+      "target": 159.378,
+      "units": 866.47,
+      "time": "2026-11-26 08:36 IST"
+    }
+  ],
   "closed_trades": [
     {
       "pair": "EUR/USD",
@@ -51,9 +63,9 @@
     }
   ],
   "last_prices": {
-    "XAU/USD": 3590.86669,
-    "EUR/USD": 1.09665,
-    "GBP/USD": 1.31081,
-    "USD/JPY": 159.16311
+    "XAU/USD": 3585.73934,
+    "EUR/USD": 1.09648,
+    "GBP/USD": 1.31059,
+    "USD/JPY": 159.18681
   }
 }
