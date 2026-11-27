@@ -1,5 +1,5 @@
 {
-  "balance": 9765.14,
+  "balance": 9829.18,
   "paused": false,
   "last_update_id": 604215578,
   "open_trades": [
@@ -28,36 +28,6 @@
       "target": 1.30936,
       "units": 121517.56,
       "time": "2026-11-27 05:31 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    },
-    {
-      "pair": "EUR/USD",
-      "side": "SELL",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "Asian / Sydney Session",
-      "entry": 1.09647,
-      "sl": 1.09696,
-      "target": 1.09566,
-      "units": 201322.45,
-      "time": "2026-11-27 05:40 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    },
-    {
-      "pair": "XAU/USD",
-      "side": "BUY",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "Asian / Sydney Session",
-      "entry": 3572.86,
-      "sl": 3565.67,
-      "target": 3584.84,
-      "units": 13.58,
-      "time": "2026-11-27 06:40 IST",
       "exit": 0.0,
       "pnl": 0.0,
       "reason": "",
@@ -139,12 +109,42 @@
       "pnl": -99.66,
       "reason": "Stop-Loss Hit",
       "closed_time": "2026-11-27 05:45 IST"
+    },
+    {
+      "pair": "XAU/USD",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 3572.86,
+      "sl": 3565.67,
+      "target": 3584.84,
+      "units": 13.58,
+      "time": "2026-11-27 06:40 IST",
+      "exit": 3584.84,
+      "pnl": 162.69,
+      "reason": "Target Hit \ud83c\udfaf",
+      "closed_time": "2026-11-27 07:30 IST"
+    },
+    {
+      "pair": "EUR/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.09647,
+      "sl": 1.09696,
+      "target": 1.09566,
+      "units": 201322.45,
+      "time": "2026-11-27 05:40 IST",
+      "exit": 1.09696,
+      "pnl": -98.65,
+      "reason": "Stop-Loss Hit",
+      "closed_time": "2026-11-27 07:31 IST"
     }
   ],
   "last_prices": {
-    "XAU/USD": 3583.25242,
-    "EUR/USD": 1.09694,
-    "GBP/USD": 1.31117,
-    "USD/JPY": 159.22755
+    "XAU/USD": 3591.4561,
+    "EUR/USD": 1.09717,
+    "GBP/USD": 1.31146,
+    "USD/JPY": 159.22406
   }
 }
