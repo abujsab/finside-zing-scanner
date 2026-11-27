@@ -32,6 +32,17 @@
       "pnl": 0.0,
       "reason": "",
       "closed_time": ""
+    },
+    {
+      "pair": "GBP/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.31073,
+      "sl": 1.31155,
+      "target": 1.30936,
+      "units": 121517.56,
+      "time": "2026-11-27 05:31 IST"
     }
   ],
   "closed_trades": [
@@ -82,9 +93,9 @@
     }
   ],
   "last_prices": {
-    "XAU/USD": 3567.24059,
-    "EUR/USD": 1.09765,
-    "GBP/USD": 1.31081,
-    "USD/JPY": 159.15183
+    "XAU/USD": 3568.25515,
+    "EUR/USD": 1.09705,
+    "GBP/USD": 1.31073,
+    "USD/JPY": 159.28364
   }
 }
