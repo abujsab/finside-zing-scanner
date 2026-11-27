@@ -1,5 +1,5 @@
 {
-  "balance": 9829.18,
+  "balance": 9729.54,
   "paused": false,
   "last_update_id": 604215578,
   "open_trades": [
@@ -20,18 +20,14 @@
     },
     {
       "pair": "GBP/USD",
-      "side": "SELL",
+      "side": "BUY",
       "strategy": "1H Trend + 15M EMA Cross",
       "session": "Asian / Sydney Session",
-      "entry": 1.31073,
-      "sl": 1.31155,
-      "target": 1.30936,
-      "units": 121517.56,
-      "time": "2026-11-27 05:31 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
+      "entry": 1.31178,
+      "sl": 1.31105,
+      "target": 1.313,
+      "units": 133281.37,
+      "time": "2026-11-27 07:36 IST"
     }
   ],
   "closed_trades": [
@@ -139,12 +135,27 @@
       "pnl": -98.65,
       "reason": "Stop-Loss Hit",
       "closed_time": "2026-11-27 07:31 IST"
+    },
+    {
+      "pair": "GBP/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.31073,
+      "sl": 1.31155,
+      "target": 1.30936,
+      "units": 121517.56,
+      "time": "2026-11-27 05:31 IST",
+      "exit": 1.31155,
+      "pnl": -99.64,
+      "reason": "Stop-Loss Hit",
+      "closed_time": "2026-11-27 07:36 IST"
     }
   ],
   "last_prices": {
-    "XAU/USD": 3591.4561,
-    "EUR/USD": 1.09717,
-    "GBP/USD": 1.31146,
-    "USD/JPY": 159.22406
+    "XAU/USD": 3602.07203,
+    "EUR/USD": 1.09728,
+    "GBP/USD": 1.31178,
+    "USD/JPY": 159.24156
   }
 }
