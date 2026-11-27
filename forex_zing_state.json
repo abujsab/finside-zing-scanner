@@ -42,7 +42,11 @@
       "sl": 1.09751,
       "target": 1.09524,
       "units": 113320.47,
-      "time": "2026-11-27 13:45 IST"
+      "time": "2026-11-27 13:45 IST",
+      "exit": 0.0,
+      "pnl": 0.0,
+      "reason": "",
+      "closed_time": ""
     }
   ],
   "closed_trades": [
