@@ -1,5 +1,5 @@
 {
-  "balance": 9964.44,
+  "balance": 9864.8,
   "paused": false,
   "last_update_id": 604215578,
   "open_trades": [
@@ -13,21 +13,6 @@
       "target": 159.378,
       "units": 866.47,
       "time": "2026-11-26 08:36 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    },
-    {
-      "pair": "EUR/USD",
-      "side": "BUY",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "Asian / Sydney Session",
-      "entry": 1.09717,
-      "sl": 1.09666,
-      "target": 1.09802,
-      "units": 195381.18,
-      "time": "2026-11-26 13:01 IST",
       "exit": 0.0,
       "pnl": 0.0,
       "reason": "",
@@ -57,7 +42,22 @@
       "sl": 3569.51,
       "target": 3577.48,
       "units": 33.33,
-      "time": "2026-11-27 05:35 IST"
+      "time": "2026-11-27 05:35 IST",
+      "exit": 0.0,
+      "pnl": 0.0,
+      "reason": "",
+      "closed_time": ""
+    },
+    {
+      "pair": "EUR/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.09647,
+      "sl": 1.09696,
+      "target": 1.09566,
+      "units": 201322.45,
+      "time": "2026-11-27 05:40 IST"
     }
   ],
   "closed_trades": [
@@ -105,12 +105,27 @@
       "pnl": -100.65,
       "reason": "Stop-Loss Hit",
       "closed_time": "2026-11-25 13:51 IST"
+    },
+    {
+      "pair": "EUR/USD",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.09717,
+      "sl": 1.09666,
+      "target": 1.09802,
+      "units": 195381.18,
+      "time": "2026-11-26 13:01 IST",
+      "exit": 1.09666,
+      "pnl": -99.64,
+      "reason": "Stop-Loss Hit",
+      "closed_time": "2026-11-27 05:40 IST"
     }
   ],
   "last_prices": {
-    "XAU/USD": 3572.49801,
-    "EUR/USD": 1.09681,
-    "GBP/USD": 1.31054,
-    "USD/JPY": 159.31956
+    "XAU/USD": 3571.4851,
+    "EUR/USD": 1.09647,
+    "GBP/USD": 1.31013,
+    "USD/JPY": 159.34881
   }
 }
