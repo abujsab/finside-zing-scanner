@@ -47,6 +47,17 @@
       "pnl": 0.0,
       "reason": "",
       "closed_time": ""
+    },
+    {
+      "pair": "XAU/USD",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 3572.86,
+      "sl": 3565.67,
+      "target": 3584.84,
+      "units": 13.58,
+      "time": "2026-11-27 06:40 IST"
     }
   ],
   "closed_trades": [
@@ -127,9 +138,9 @@
     }
   ],
   "last_prices": {
-    "XAU/USD": 3560.26828,
-    "EUR/USD": 1.0962,
-    "GBP/USD": 1.30966,
-    "USD/JPY": 159.30624
+    "XAU/USD": 3572.86019,
+    "EUR/USD": 1.09662,
+    "GBP/USD": 1.31009,
+    "USD/JPY": 159.2833
   }
 }
