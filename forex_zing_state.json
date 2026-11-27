@@ -42,7 +42,11 @@
       "sl": 1.097,
       "target": 1.09862,
       "units": 159500.66,
-      "time": "2026-11-27 07:40 IST"
+      "time": "2026-11-27 07:40 IST",
+      "exit": 0.0,
+      "pnl": 0.0,
+      "reason": "",
+      "closed_time": ""
     }
   ],
   "closed_trades": [
@@ -168,9 +172,9 @@
     }
   ],
   "last_prices": {
-    "XAU/USD": 3614.83556,
-    "EUR/USD": 1.09761,
-    "GBP/USD": 1.31189,
-    "USD/JPY": 159.22316
+    "XAU/USD": 3616.57845,
+    "EUR/USD": 1.09775,
+    "GBP/USD": 1.31201,
+    "USD/JPY": 159.21415
   }
 }
