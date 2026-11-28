@@ -1,54 +1,8 @@
 {
-  "balance": 9632.24,
+  "balance": 9861.36,
   "paused": false,
   "last_update_id": 604215578,
-  "open_trades": [
-    {
-      "pair": "USD/JPY",
-      "side": "BUY",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "Asian / Sydney Session",
-      "entry": 159.187,
-      "sl": 159.072,
-      "target": 159.378,
-      "units": 866.47,
-      "time": "2026-11-26 08:36 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    },
-    {
-      "pair": "GBP/USD",
-      "side": "BUY",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "Asian / Sydney Session",
-      "entry": 1.31178,
-      "sl": 1.31105,
-      "target": 1.313,
-      "units": 133281.37,
-      "time": "2026-11-27 07:36 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    },
-    {
-      "pair": "EUR/USD",
-      "side": "SELL",
-      "strategy": "1H Trend + 15M EMA Cross",
-      "session": "London Session",
-      "entry": 1.09666,
-      "sl": 1.09751,
-      "target": 1.09524,
-      "units": 113320.47,
-      "time": "2026-11-27 13:45 IST",
-      "exit": 0.0,
-      "pnl": 0.0,
-      "reason": "",
-      "closed_time": ""
-    }
-  ],
+  "open_trades": [],
   "closed_trades": [
     {
       "pair": "EUR/USD",
@@ -184,12 +138,57 @@
       "pnl": -97.3,
       "reason": "Stop-Loss Hit",
       "closed_time": "2026-11-27 13:45 IST"
+    },
+    {
+      "pair": "EUR/USD",
+      "side": "SELL",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "London Session",
+      "entry": 1.09666,
+      "sl": 1.09751,
+      "target": 1.09524,
+      "units": 113320.47,
+      "time": "2026-11-27 13:45 IST",
+      "exit": 1.09524,
+      "pnl": 160.92,
+      "reason": "Target Hit \ud83c\udfaf",
+      "closed_time": "2026-11-28 05:31 IST"
+    },
+    {
+      "pair": "GBP/USD",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 1.31178,
+      "sl": 1.31105,
+      "target": 1.313,
+      "units": 133281.37,
+      "time": "2026-11-27 07:36 IST",
+      "exit": 1.31105,
+      "pnl": -97.3,
+      "reason": "Stop-Loss Hit",
+      "closed_time": "2026-11-28 05:31 IST"
+    },
+    {
+      "pair": "USD/JPY",
+      "side": "BUY",
+      "strategy": "1H Trend + 15M EMA Cross",
+      "session": "Asian / Sydney Session",
+      "entry": 159.187,
+      "sl": 159.072,
+      "target": 159.378,
+      "units": 866.47,
+      "time": "2026-11-26 08:36 IST",
+      "exit": 159.378,
+      "pnl": 165.5,
+      "reason": "Target Hit \ud83c\udfaf",
+      "closed_time": "2026-11-28 05:31 IST"
     }
   ],
   "last_prices": {
-    "XAU/USD": 3668.29279,
-    "EUR/USD": 1.09666,
-    "GBP/USD": 1.31218,
-    "USD/JPY": 159.37541
+    "XAU/USD": 3654.47362,
+    "EUR/USD": 1.0943,
+    "GBP/USD": 1.30997,
+    "USD/JPY": 159.50176
   }
 }
